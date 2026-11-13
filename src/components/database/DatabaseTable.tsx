@@ -160,14 +160,12 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
       }}
       onDrop={handleDrop}
     >
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-zinc-800 px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-sm font-semibold">{schema.name}</h1>
-          <span className="shrink-0 text-xs text-zinc-500">
-            {visibleRows.length === total ? total : `${visibleRows.length} de ${total}`}
-          </span>
-        </div>
-        <label className="flex w-72 items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 focus-within:border-sky-500">
+      <header className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
+        <h1 className="truncate text-sm font-semibold">{schema.name}</h1>
+        <span className="shrink-0 text-xs text-zinc-500">
+          {visibleRows.length === total ? total : `${visibleRows.length} de ${total}`}
+        </span>
+        <label className="ml-3 flex w-72 min-w-40 shrink items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 focus-within:border-sky-500">
           <Search size={14} className="shrink-0 text-zinc-500" />
           <input
             value={query}
@@ -182,7 +180,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
             </button>
           )}
         </label>
-        <div className="flex items-center justify-end gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <ToolbarButton
             buttonRef={filterButton}
             icon={ListFilter}

@@ -2,7 +2,7 @@ import { FileUp } from 'lucide-react'
 import { useRef, useState, type DragEvent } from 'react'
 import type { DatabaseSchema } from '../../db/db'
 import { TITLE_FIELD_ID, type FieldType } from '../../db/databaseTypes'
-import { importRecords, type ImportColumn } from '../../db/databases'
+import { importRecords, type ImportColumn, type ImportResult } from '../../db/databases'
 import {
   CSV_DELIMITERS,
   inferFieldType,
@@ -75,6 +75,12 @@ export function ImportModal({ target, initialFile, onImported, onClose }: Import
   const [name, setName] = useState(initialFile ? baseName(initialFile.name) : '')
   const [error, setError] = useState<string | null>(initial?.error ?? null)
   const [importing, setImporting] = useState(false)
+  const [matchFieldId, setMatchFieldId] = useState('')
+  const [result, setResult] = useState<ImportResult | null>(null)
+
+  // Only fields that some column actually fills can serve as the matching key.
+  const keyFields = (target?.fields ?? []).filter((field) => choices.some((choice) => choice.destination === field.id))
+  const matchField = keyFields.find((field) => field.id === matchFieldId)
 
   function parse(source: LoadedFile, nextDelimiter: string, header: boolean) {
     const result = tryParse(source, nextDelimiter, header)
@@ -136,18 +142,49 @@ export function ImportModal({ target, initialFile, onImported, onClose }: Import
 
     setImporting(true)
     try {
-      const schemaPath = await importRecords({
+      const imported = await importRecords({
         schemaPath: target?.path,
         newDatabase: target ? undefined : { name, titleName: table.headers[titleIndex] },
         columns,
         records: table.records,
+        matchFieldId: matchField?.id,
       })
-      onImported(schemaPath)
-      onClose()
+      onImported(imported.schemaPath)
+      if (matchField) setResult(imported)
+      else onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setImporting(false)
     }
+    setImporting(false)
+  }
+
+  if (result) {
+    const unchanged = (table?.records.length ?? 0) - result.created - result.updated
+    return (
+      <Modal
+        title="Importação concluída"
+        onClose={onClose}
+        footer={
+          <button onClick={onClose} className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium hover:bg-sky-500">
+            Fechar
+          </button>
+        }
+      >
+        <ul className="space-y-1 text-zinc-300">
+          <li>
+            <strong className="text-zinc-100">{result.updated}</strong> linha(s) atualizada(s)
+          </li>
+          <li>
+            <strong className="text-zinc-100">{result.created}</strong> linha(s) nova(s)
+          </li>
+          {unchanged > 0 && (
+            <li className="text-zinc-500">
+              {unchanged} linha(s) do arquivo já estavam iguais ou repetiam a mesma chave
+            </li>
+          )}
+        </ul>
+      </Modal>
+    )
   }
 
   return (
@@ -320,6 +357,28 @@ export function ImportModal({ target, initialFile, onImported, onClose }: Import
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {target && table && (
+          <div className="space-y-1.5">
+            <label className="flex flex-wrap items-center gap-2">
+              <span className="text-zinc-400">Linhas que já existem</span>
+              <select value={matchField?.id ?? ''} onChange={(e) => setMatchFieldId(e.target.value)} className={`${controlClass} w-auto`}>
+                <option value="">Sempre criar linhas novas</option>
+                {keyFields.map((field) => (
+                  <option key={field.id} value={field.id}>
+                    Atualizar quando "{field.name}" for igual
+                  </option>
+                ))}
+              </select>
+            </label>
+            {matchField && (
+              <p className="text-xs text-zinc-500">
+                Uma linha do arquivo com o mesmo "{matchField.name}" de uma linha existente atualiza essa linha (sem diferenciar
+                maiúsculas). Células vazias no arquivo não apagam valores. As demais viram linhas novas.
+              </p>
+            )}
           </div>
         )}
 

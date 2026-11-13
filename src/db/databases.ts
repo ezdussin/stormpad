@@ -143,6 +143,17 @@ interface ImportRequest {
   newDatabase?: { name: string; titleName: string }
   columns: ImportColumn[]
   records: string[][]
+  /**
+   * Existing field used as a key: a record whose value in it matches an existing row (same text,
+   * ignoring case) updates that row instead of creating a new one. Empty cells never clear values.
+   */
+  matchFieldId?: string
+}
+
+export interface ImportResult {
+  schemaPath: string
+  created: number
+  updated: number
 }
 
 function importedValue(raw: string, field: Field, optionId: (name: string) => string): CellValue {
@@ -164,9 +175,17 @@ function importedValue(raw: string, field: Field, optionId: (name: string) => st
   }
 }
 
-/** Creates any new fields and options, then all rows, in a single local transaction. */
-export async function importRecords({ schemaPath, newDatabase, columns, records }: ImportRequest): Promise<string> {
+/** Creates any new fields and options, then creates or updates all rows, in a single local transaction. */
+export async function importRecords({
+  schemaPath,
+  newDatabase,
+  columns,
+  records,
+  matchFieldId,
+}: ImportRequest): Promise<ImportResult> {
   let path = schemaPath ?? ''
+  let created = 0
+  let updated = 0
   await db.transaction('rw', [db.databases, db.databaseRows], async () => {
     const now = Date.now()
     let meta: SchemaMeta
@@ -203,30 +222,74 @@ export async function importRecords({ schemaPath, newDatabase, columns, records 
       return option.id
     }
 
-    const rows: DatabaseRow[] = records.map((record, i) => {
+    const matchField = isNew ? undefined : meta.fields.find((field) => field.id === matchFieldId)
+    const keyOf = (values: Record<string, CellValue>) =>
+      matchField ? displayText(values[matchField.id], matchField).trim().toLowerCase() : ''
+
+    // Rows a key can point to: existing ones first, then rows created earlier in this same import,
+    // so repeated keys in the file update the row they first created instead of duplicating it.
+    const byKey = new Map<string, RowMeta>()
+    const originals = new Map<RowMeta, DatabaseRow>()
+    if (matchField) {
+      const existingRows = await db.databaseRows.where('dir').equals(meta.dir).sortBy('createdAt')
+      for (const row of existingRows) {
+        const key = keyOf(row.values)
+        if (row.syncStatus === 'deleted' || !key || byKey.has(key)) continue
+        const working: RowMeta = { id: row.id, dir: row.dir, values: { ...row.values }, createdAt: row.createdAt }
+        byKey.set(key, working)
+        originals.set(working, row)
+      }
+    }
+
+    const newRows: RowMeta[] = []
+    for (const [i, record] of records.entries()) {
       const values: Record<string, CellValue> = {}
       for (const { index, field } of plan) {
         const value = importedValue(record[index] ?? '', field, optionIdFor(field))
         if (value !== null && !(Array.isArray(value) && value.length === 0)) values[field.id] = value
       }
+      const key = keyOf(values)
+      const target = key ? byKey.get(key) : undefined
+      if (target) {
+        // The key matched ignoring case; keep the spelling already in the database.
+        delete values[matchField!.id]
+        Object.assign(target.values, values)
+        continue
+      }
       // Consecutive timestamps keep the file's row order under the default (creation) sort.
       const rowMeta: RowMeta = { id: crypto.randomUUID(), dir: meta.dir, values, createdAt: now + i }
-      return {
-        path: `${meta.dir}rows/${rowMeta.id}.json`,
-        content: buildRowContent(rowMeta),
-        sha: null,
-        updatedAt: now,
-        syncStatus: 'dirty',
-        ...rowMeta,
-      }
-    })
+      newRows.push(rowMeta)
+      if (key) byKey.set(key, rowMeta)
+    }
 
     const schemaRecord = { path, content: buildSchemaContent(meta), updatedAt: now, syncStatus: 'dirty' as const, ...meta }
     if (isNew) await db.databases.add({ ...schemaRecord, sha: null })
     else await db.databases.update(path, schemaRecord)
-    await db.databaseRows.bulkAdd(rows)
+
+    await db.databaseRows.bulkAdd(
+      newRows.map((rowMeta) => ({
+        path: `${meta.dir}rows/${rowMeta.id}.json`,
+        content: buildRowContent(rowMeta),
+        sha: null,
+        updatedAt: now,
+        syncStatus: 'dirty' as const,
+        ...rowMeta,
+      })),
+    )
+    created = newRows.length
+
+    for (const [working, original] of originals) {
+      if (JSON.stringify(working.values) === JSON.stringify(original.values)) continue
+      await db.databaseRows.update(original.path, {
+        values: working.values,
+        content: buildRowContent(working),
+        updatedAt: now,
+        syncStatus: 'dirty',
+      })
+      updated++
+    }
   })
-  return path
+  return { schemaPath: path, created, updated }
 }
 
 async function updateSchema(path: string, change: (schema: SchemaMeta) => SchemaMeta): Promise<void> {
