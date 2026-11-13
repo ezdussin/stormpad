@@ -1,0 +1,51 @@
+export function fileNameOf(path: string): string {
+  return (path.split('/').pop() ?? path).replace(/\.md$/, '')
+}
+
+// Characters Windows refuses in file names, so the repo stays checkout-able everywhere.
+const INVALID_FILE_NAME_CHARS = /[\\/:*?"<>|]/
+const MAX_FILE_NAME_LENGTH = 120
+
+export function normalizeFileName(name: string): string {
+  return name.trim().replace(/\.md$/i, '')
+}
+
+export function validateFileName(name: string): string | null {
+  const normalized = normalizeFileName(name)
+  if (!normalized) return 'Informe um nome.'
+  if (INVALID_FILE_NAME_CHARS.test(normalized)) return 'O nome não pode conter / \\ : * ? " < > |'
+  if (normalized.startsWith('.')) return 'O nome não pode começar com ponto.'
+  if (normalized.length > MAX_FILE_NAME_LENGTH) return `O nome pode ter no máximo ${MAX_FILE_NAME_LENGTH} caracteres.`
+  return null
+}
+
+export function slugify(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|-+$/g, '')
+    .slice(0, MAX_FILE_NAME_LENGTH)
+}
+
+export function dirOf(path: string): string {
+  return path.slice(0, path.lastIndexOf('/') + 1)
+}
+
+export function extensionOf(path: string): string {
+  const name = path.split('/').pop() ?? path
+  const dot = name.lastIndexOf('.')
+  return dot === -1 ? '' : name.slice(dot + 1).toLowerCase()
+}
+
+export function timestampSlug(date: Date): string {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-')
+}
+
+/** `<root>/YYYY/MM/<timestamp>-<random>`, without extension. */
+export function datedBasePath(root: string, date: Date): string {
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${root}/${year}/${month}/${timestampSlug(date)}-${crypto.randomUUID().slice(0, 8)}`
+}
