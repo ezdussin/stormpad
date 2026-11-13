@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "stormpad",
+  "productName": "Stormpad",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.ezdussin.stormpad",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "stormpad",
-        "width": 800,
-        "height": 600,
+        "title": "Stormpad",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
         "resizable": true,
         "fullscreen": false
       }
