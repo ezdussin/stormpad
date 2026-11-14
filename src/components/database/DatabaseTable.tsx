@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUp,
   ArrowUpDown,
+  CopyCheck,
   CopyPlus,
   FileUp,
   ListFilter,
@@ -23,6 +24,7 @@ import { formatOf, loadImportFile, type LoadedFile } from '../../lib/importFile'
 import { ConfirmDialog } from '../Modal'
 import { useContextMenu } from '../useContextMenu'
 import { Cell } from './Cell'
+import { DuplicatesModal } from './DuplicatesModal'
 import { FieldModal } from './FieldModal'
 import { FIELD_TYPES } from './fieldTypes'
 import { ImportModal } from './ImportModal'
@@ -62,6 +64,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
   const [importing, setImporting] = useState<{ file?: LoadedFile } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [query, setQuery] = useState('')
+  const [findingDuplicates, setFindingDuplicates] = useState(false)
   const { fields } = schema
 
   function handleDragOver(event: DragEvent) {
@@ -194,6 +197,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
             count={schema.view.sorts.length}
             onClick={(e) => togglePopover('sort', e.currentTarget)}
           />
+          <ToolbarButton icon={CopyCheck} label="Duplicatas" count={0} onClick={() => setFindingDuplicates(true)} />
           <ToolbarButton icon={FileUp} label="Importar" count={0} onClick={() => setImporting({})} />
           <button
             onClick={async () => setNewRowPath(await addRow(schema.dir))}
@@ -285,6 +289,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
           <FileUp size={18} className="mr-2" /> Solte o arquivo CSV, TSV ou JSON para importar
         </div>
       )}
+      {findingDuplicates && <DuplicatesModal schema={schema} rows={rows ?? []} onClose={() => setFindingDuplicates(false)} />}
       {importing && (
         <ImportModal target={schema} initialFile={importing.file} onImported={() => {}} onClose={() => setImporting(null)} />
       )}

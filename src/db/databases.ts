@@ -475,6 +475,12 @@ export async function duplicateRow(path: string): Promise<string | null> {
   return row ? addRow(row.dir, structuredClone(row.values)) : null
 }
 
+export async function deleteRows(paths: string[]): Promise<void> {
+  await db.transaction('rw', db.databaseRows, async () => {
+    for (const path of paths) await deleteRow(path)
+  })
+}
+
 export async function deleteRow(path: string): Promise<void> {
   const row = await db.databaseRows.get(path)
   if (!row) return

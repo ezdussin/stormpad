@@ -176,6 +176,34 @@ export function searchRows(rows: DatabaseRow[], fields: Field[], query: string):
     .map(({ row }) => row)
 }
 
+function comparableText(value: CellValue | undefined, field: Field): string {
+  // Option order inside a multi-select doesn't make two rows different.
+  const text =
+    field.type === 'multi_select'
+      ? selectedOptions(value ?? null, field)
+          .map((option) => option.name)
+          .sort()
+          .join(', ')
+      : displayText(value, field)
+  return normalizeForSearch(text).replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Groups rows whose values are equal in every given field (ignoring case, accents and extra spaces).
+ * Rows empty in all of those fields are never duplicates. Each group is oldest-first.
+ */
+export function findDuplicates(rows: DatabaseRow[], fields: Field[]): DatabaseRow[][] {
+  if (fields.length === 0) return []
+  const groups = new Map<string, DatabaseRow[]>()
+  for (const row of [...rows].sort((a, b) => a.createdAt - b.createdAt)) {
+    const parts = fields.map((field) => comparableText(row.values[field.id], field))
+    if (parts.every((part) => !part)) continue
+    const key = JSON.stringify(parts)
+    groups.set(key, [...(groups.get(key) ?? []), row])
+  }
+  return [...groups.values()].filter((group) => group.length > 1)
+}
+
 const TRUTHY = new Set(['true', 'sim', 'yes', 'x', '1', 'v'])
 
 /** Converts a value when its field changes type; `to.options` must already contain options for every name. */

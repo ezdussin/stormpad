@@ -23,6 +23,7 @@ import { getSetting, setSetting, type RepoConfig } from '../db/settings'
 import { copyText } from '../lib/clipboard'
 import { stripFrontmatter } from '../lib/frontmatter'
 import { fileNameOf } from '../lib/paths'
+import { openExternal } from '../lib/openExternal'
 import { normalizeTags } from '../lib/tags'
 import { useSyncContext } from '../sync/SyncContext'
 import type { MenuEntry } from './ContextMenu'
@@ -121,7 +122,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
         label: 'Abrir no GitHub',
         icon: ExternalLink,
         disabled: !onGitHub,
-        onSelect: () => void window.open(url, '_blank', 'noopener'),
+        onSelect: () => openExternal(url),
       },
       'separator',
       { label: 'Renomear', icon: PencilLine, onSelect: () => setRenamingPath(note.path) },

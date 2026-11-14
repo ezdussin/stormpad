@@ -4,6 +4,7 @@ import type { DatabaseRow } from '../../db/db'
 import type { CellValue, Field } from '../../db/databaseTypes'
 import { setRowValue } from '../../db/databases'
 import { selectedOptions } from '../../lib/databaseQuery'
+import { absoluteUrl, openExternal } from '../../lib/openExternal'
 import { OptionChip, OptionPicker } from './OptionPicker'
 
 const cellBox = 'min-h-[34px] px-2 py-1.5'
@@ -27,13 +28,14 @@ function formatValue(value: CellValue, field: Field) {
   if (field.type === 'number' && typeof value === 'number') return value.toLocaleString()
   if (field.type === 'date' && typeof value === 'string') return new Date(`${value}T00:00`).toLocaleDateString()
   if (field.type === 'url' && typeof value === 'string') {
-    const href = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`
     return (
       <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
+        href={absoluteUrl(value)}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          openExternal(value)
+        }}
         className="inline-flex max-w-full items-center gap-1 text-sky-400 underline underline-offset-2"
       >
         <span className="truncate">{value}</span>

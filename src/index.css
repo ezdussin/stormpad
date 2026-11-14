@@ -57,8 +57,13 @@ body {
 
   & a {
     color: var(--color-sky-400);
+    cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
+
+    &:hover {
+      color: var(--color-sky-300);
+    }
   }
 
   & ul {
