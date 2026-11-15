@@ -83,6 +83,7 @@ function InputCell({ field, value, autoEdit = false, onSave }: InputCellProps) {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={handleKeyDown}
+        spellCheck={false}
         className={`${cellBox} w-full bg-zinc-900 outline outline-2 -outline-offset-2 outline-sky-500 [color-scheme:dark]`}
       />
     )

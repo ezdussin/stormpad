@@ -48,6 +48,7 @@ function MemoryEditor({ initial, onSave, onCancel }: { initial: string; onSave: 
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
+        spellCheck={false}
         className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none focus:border-sky-500"
       />
       <div className="flex justify-end gap-2 text-xs">

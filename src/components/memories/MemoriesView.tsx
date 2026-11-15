@@ -220,6 +220,7 @@ export function MemoriesView() {
             onKeyDown={handleComposerKeyDown}
             placeholder="Escreva uma lembrança…"
             title="Enter envia · Shift+Enter quebra linha"
+            spellCheck={false}
             className="flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-sky-500"
           />
           <select

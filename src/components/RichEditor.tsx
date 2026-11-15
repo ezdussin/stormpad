@@ -42,7 +42,7 @@ export function RichEditor({ markdown, onChange, menuEntries }: RichEditorProps)
     extensions,
     content: markdown,
     contentType: 'markdown',
-    editorProps: { attributes: { class: 'tiptap-content flex-1 outline-none' } },
+    editorProps: { attributes: { class: 'tiptap-content flex-1 outline-none', spellcheck: 'false' } },
     onUpdate: ({ editor }) => {
       lastMarkdown.current = collapseBlankLines(editor.getMarkdown())
       onChangeRef.current(lastMarkdown.current)
