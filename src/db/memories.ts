@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { refreshMemoriesWidget } from '../capacitor/widgetBridge'
 import { parseFrontmatter, stripFrontmatter, unquote } from '../lib/frontmatter'
 import { datedBasePath } from '../lib/paths'
 import { db, type Memory, type MemoryList } from './db'
@@ -54,6 +55,7 @@ export async function addMemory(body: string, listId: string | null): Promise<vo
     syncStatus: 'dirty',
     ...meta,
   })
+  void refreshMemoriesWidget()
 }
 
 async function updateMemory(path: string, change: (memory: MemoryMeta) => MemoryMeta): Promise<void> {
@@ -68,6 +70,7 @@ async function updateMemory(path: string, change: (memory: MemoryMeta) => Memory
       syncStatus: 'dirty',
     })
   })
+  void refreshMemoriesWidget()
 }
 
 export function editMemory(path: string, body: string): Promise<void> {
@@ -90,6 +93,7 @@ export async function deleteMemory(path: string): Promise<void> {
   } else {
     await db.memories.update(path, { syncStatus: 'deleted', updatedAt: Date.now() })
   }
+  void refreshMemoriesWidget()
 }
 
 // ---- board lists -----------------------------------------------------------
@@ -131,6 +135,7 @@ async function updateLists(change: (lists: MemoryList[]) => MemoryList[]): Promi
       lists,
     })
   })
+  void refreshMemoriesWidget()
 }
 
 export async function addList(name: string): Promise<string> {

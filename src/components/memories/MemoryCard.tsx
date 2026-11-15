@@ -71,6 +71,7 @@ interface MemoryCardProps {
   memory: Memory
   editing: boolean
   dragging: boolean
+  highlighted?: boolean
   onMenu: (event: MouseEvent) => void
   onDragStart: () => void
   onDragEnd: () => void
@@ -78,7 +79,17 @@ interface MemoryCardProps {
   onCancelEdit: () => void
 }
 
-export function MemoryCard({ memory, editing, dragging, onMenu, onDragStart, onDragEnd, onSave, onCancelEdit }: MemoryCardProps) {
+export function MemoryCard({
+  memory,
+  editing,
+  dragging,
+  highlighted = false,
+  onMenu,
+  onDragStart,
+  onDragEnd,
+  onSave,
+  onCancelEdit,
+}: MemoryCardProps) {
   function handleDragStart(event: DragEvent) {
     event.dataTransfer.setData(MEMORY_DRAG_TYPE, memory.path)
     event.dataTransfer.effectAllowed = 'move'
@@ -92,7 +103,11 @@ export function MemoryCard({ memory, editing, dragging, onMenu, onDragStart, onD
       onDragEnd={onDragEnd}
       onContextMenu={editing ? undefined : onMenu}
       className={`rounded-lg border p-2.5 text-sm shadow-sm shadow-black/30 transition-opacity ${
-        memory.syncStatus === 'conflict' ? 'border-amber-500/60 bg-amber-950/40' : 'border-zinc-800 bg-zinc-900'
+        memory.syncStatus === 'conflict'
+          ? 'border-amber-500/60 bg-amber-950/40'
+          : highlighted
+            ? 'border-sky-500 bg-sky-950/40 ring-1 ring-sky-500/40'
+            : 'border-zinc-800 bg-zinc-900'
       } ${editing ? '' : 'cursor-grab active:cursor-grabbing'} ${dragging ? 'opacity-40' : ''}`}
     >
       {editing ? (

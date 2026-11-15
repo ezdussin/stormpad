@@ -11,7 +11,8 @@ import {
   SendHorizontal,
   Trash2,
 } from 'lucide-react'
-import { useMemo, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import type { Memory, MemoryList } from '../../db/db'
 import {
   addList,
@@ -26,6 +27,7 @@ import {
   useMemories,
   useMemoryLists,
 } from '../../db/memories'
+import { clearSetting, getSetting } from '../../db/settings'
 import { copyText } from '../../lib/clipboard'
 import type { MenuEntry } from '../ContextMenu'
 import { ConfirmDialog } from '../Modal'
@@ -44,10 +46,20 @@ export function MemoriesView() {
   const memories = useMemories()
   const lists = useMemoryLists()
   const menu = useContextMenu()
+  const deepLinkMemoryId = useLiveQuery(() => getSetting('deep_link_memory_id'), [])
   const [draft, setDraft] = useState('')
   const [draftListId, setDraftListId] = useState<string | null>(null)
   const [editingPath, setEditingPath] = useState<string | null>(null)
   const [draggingPath, setDraggingPath] = useState<string | null>(null)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!deepLinkMemoryId) return
+    setHighlightId(deepLinkMemoryId)
+    void clearSetting('deep_link_memory_id')
+    const timer = window.setTimeout(() => setHighlightId(null), 2500)
+    return () => window.clearTimeout(timer)
+  }, [deepLinkMemoryId])
   const [dropListId, setDropListId] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Memory | null>(null)
   const [pendingListDelete, setPendingListDelete] = useState<MemoryList | null>(null)
@@ -180,6 +192,7 @@ export function MemoriesView() {
                     memory={memory}
                     editing={editingPath === memory.path}
                     dragging={draggingPath === memory.path}
+                    highlighted={highlightId === memory.id}
                     onMenu={(event) => openCardMenu(event, memory, list.id)}
                     onDragStart={() => setDraggingPath(memory.path)}
                     onDragEnd={() => {

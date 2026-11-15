@@ -20,6 +20,10 @@ export async function setSetting(key: SettingKey, value: string): Promise<void> 
   await db.settings.put({ key, value })
 }
 
+export async function clearSetting(key: SettingKey): Promise<void> {
+  await db.settings.delete(key)
+}
+
 export async function loadRepoConfig(): Promise<RepoConfig | null> {
   const [token, owner, repo, branch] = await db.settings.bulkGet([
     'github_token',

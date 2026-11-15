@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { refreshMemoriesWidget } from '../capacitor/widgetBridge'
 import type { RepoConfig } from '../db/settings'
 import { GitHubSyncService, type SyncResult } from './GitHubSyncService'
 
@@ -24,6 +25,7 @@ export function useSync(config: RepoConfig) {
     setState({ status: 'syncing' })
     try {
       const lastResult = await service.sync()
+      void refreshMemoriesWidget()
       setState({ status: 'idle', lastResult, lastSyncAt: Date.now() })
     } catch (error) {
       setState({ status: 'error', message: error instanceof Error ? error.message : String(error) })

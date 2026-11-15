@@ -1,0 +1,20 @@
+{
+  "name": "@stormpad/widget-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Writes memories snapshots to the iOS App Group for WidgetKit",
+  "main": "index.js",
+  "files": [
+    "ios/Sources",
+    "Package.swift",
+    "StormpadWidgetBridge.podspec"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}

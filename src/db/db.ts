@@ -87,6 +87,7 @@ export type SettingKey =
   | 'last_tree_sha'
   | 'editor_mode'
   | 'section'
+  | 'deep_link_memory_id'
 
 export interface Setting {
   key: SettingKey

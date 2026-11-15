@@ -52,9 +52,27 @@ npm run preview   # serve o build localmente
 npm run lint      # oxlint
 ```
 
+### Desktop (Tauri)
+
+```bash
+npx tauri dev
+npx tauri build
+```
+
+### iOS (Capacitor + widget de lembranças)
+
+Requer Mac, Xcode e conta Apple Developer. O wrapper Capacitor e os fontes do WidgetKit já estão no repo; o target do widget precisa ser ligado uma vez no Xcode — veja [`native/ios/MAC_SETUP.md`](native/ios/MAC_SETUP.md).
+
+```bash
+npm run cap:sync   # build web + cap sync ios
+npm run cap:open   # abre o Xcode
+```
+
+O widget **Lembranças** lê um snapshot no App Group (`group.com.ezdussin.stormpad`), atualizado após CRUD e sync. Deep link: `stormpad://memories`.
+
 ### Stack
 
-React 19, TypeScript, Vite, Tailwind CSS 4, Dexie (IndexedDB), TipTap (editor Markdown), Octokit (API do GitHub) e lucide-react (ícones).
+React 19, TypeScript, Vite, Tailwind CSS 4, Dexie (IndexedDB), TipTap (editor Markdown), Octokit (API do GitHub), lucide-react (ícones), Capacitor (iOS) e Tauri (desktop).
 
 ### Estrutura do código
 
@@ -64,9 +82,12 @@ src/
     memories/          # quadro kanban de lembranças
     gallery/           # galeria de imagens
     database/          # bancos de dados (tabela, filtros, importação…)
+  capacitor/           # bridge do widget iOS e deep links
   db/                  # tabelas do IndexedDB e operações de cada modalidade
   lib/                 # utilitários: frontmatter, CSV, imagens, consultas…
   sync/                # sincronização com o GitHub
+plugins/widget-bridge/ # plugin Capacitor nativo (App Group + WidgetCenter)
+ios/                   # projeto Capacitor + fontes StormpadMemoriesWidget
 ```
 
 ## Limitações conhecidas

@@ -15,6 +15,13 @@ dist
 dist-ssr
 *.local
 
+# Capacitor / Xcode derived
+ios/App/Pods
+ios/App/build
+ios/DerivedData
+ios/App/App/public
+.capacitor
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
