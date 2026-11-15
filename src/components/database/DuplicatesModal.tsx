@@ -4,7 +4,7 @@ import type { DatabaseRow, DatabaseSchema } from '../../db/db'
 import { TITLE_FIELD_ID } from '../../db/databaseTypes'
 import { deleteRows } from '../../db/databases'
 import { displayText, findDuplicates } from '../../lib/databaseQuery'
-import { Modal } from '../Modal'
+import { ConfirmDialog, Modal } from '../Modal'
 import { FIELD_TYPES } from './fieldTypes'
 
 const checkboxClass = 'size-4 cursor-pointer accent-sky-500'
@@ -25,6 +25,7 @@ export function DuplicatesModal({ schema, rows, onClose }: DuplicatesModalProps)
   const [fieldIds, setFieldIds] = useState<Set<string>>(() => new Set([TITLE_FIELD_ID]))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const compareFields = useMemo(() => schema.fields.filter((field) => fieldIds.has(field.id)), [schema.fields, fieldIds])
   // Recomputed live, so rows deleted or edited elsewhere drop out of the review.
@@ -115,6 +116,7 @@ export function DuplicatesModal({ schema, rows, onClose }: DuplicatesModalProps)
   }
 
   return (
+    <>
     <Modal
       title={`Duplicatas por ${compareFields.map((field) => field.name).join(' + ')}`}
       onClose={deleting ? () => {} : onClose}
@@ -128,7 +130,7 @@ export function DuplicatesModal({ schema, rows, onClose }: DuplicatesModalProps)
             Cancelar
           </button>
           <button
-            onClick={() => void removeSelected()}
+            onClick={() => setConfirmDelete(true)}
             disabled={selectedPaths.length === 0 || deleting}
             className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium hover:bg-red-500 disabled:opacity-40"
           >
@@ -237,5 +239,24 @@ export function DuplicatesModal({ schema, rows, onClose }: DuplicatesModalProps)
         </div>
       )}
     </Modal>
+    {confirmDelete && (
+      <ConfirmDialog
+        title="Excluir duplicatas"
+        danger
+        confirmLabel={`Excluir ${selectedPaths.length}`}
+        message={
+          <p className="text-zinc-300">
+            Excluir <strong className="text-zinc-100">{selectedPaths.length}</strong> linha(s) selecionada(s)? Essa ação
+            não pode ser desfeita daqui.
+          </p>
+        }
+        onConfirm={() => {
+          setConfirmDelete(false)
+          void removeSelected()
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    )}
+    </>
   )
 }

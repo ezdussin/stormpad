@@ -9,6 +9,7 @@ import {
   RefreshCw,
   type LucideIcon,
 } from 'lucide-react'
+import { useState } from 'react'
 import { db } from '../db/db'
 import { clearRepoConfig, getSetting, setSetting, type RepoConfig } from '../db/settings'
 import { SyncContext } from '../sync/SyncContext'
@@ -16,6 +17,7 @@ import { useSync, type SyncState } from '../sync/useSync'
 import { DatabaseSection } from './database/DatabaseSection'
 import { GalleryView } from './gallery/GalleryView'
 import { MemoriesView } from './memories/MemoriesView'
+import { ConfirmDialog } from './Modal'
 import { NotesShell } from './NotesShell'
 
 type Section = 'notes' | 'memories' | 'gallery' | 'databases'
@@ -50,6 +52,7 @@ export function AppShell({ config }: { config: RepoConfig }) {
   const syncValue = useSync(config)
   const { state, sync } = syncValue
   const conflictCount = useConflictCount()
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
   const savedSection = useLiveQuery(async () => (await getSetting('section')) ?? null, [], 'loading' as const)
   const section: Section | null =
     savedSection === 'loading' ? null : SECTIONS.some((s) => s.id === savedSection) ? (savedSection as Section) : 'notes'
@@ -91,7 +94,7 @@ export function AppShell({ config }: { config: RepoConfig }) {
                 {state.status === 'error' && <span className="absolute top-2 right-2 size-2 rounded-full bg-red-500" />}
               </button>
               <button
-                onClick={() => void clearRepoConfig()}
+                onClick={() => setConfirmDisconnect(true)}
                 title="Desconectar"
                 className={`${railButton} text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200`}
               >
@@ -108,6 +111,25 @@ export function AppShell({ config }: { config: RepoConfig }) {
           </div>
         </div>
       </div>
+
+      {confirmDisconnect && (
+        <ConfirmDialog
+          title="Desconectar"
+          danger
+          confirmLabel="Desconectar"
+          message={
+            <p className="text-zinc-300">
+              Remover o token deste dispositivo e voltar à tela de conexão? As notas locais continuam salvas aqui; você
+              precisará colar o token de novo para sincronizar.
+            </p>
+          }
+          onConfirm={() => {
+            setConfirmDisconnect(false)
+            void clearRepoConfig()
+          }}
+          onCancel={() => setConfirmDisconnect(false)}
+        />
+      )}
     </SyncContext.Provider>
   )
 }

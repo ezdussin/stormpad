@@ -60,6 +60,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
   const [popover, setPopover] = useState<{ kind: 'filter' | 'sort'; anchor: HTMLElement } | null>(null)
   const [fieldModal, setFieldModal] = useState<{ field?: Field } | null>(null)
   const [pendingFieldDelete, setPendingFieldDelete] = useState<Field | null>(null)
+  const [pendingRowDelete, setPendingRowDelete] = useState<DatabaseRow | null>(null)
   const [newRowPath, setNewRowPath] = useState<string | null>(null)
   const [importing, setImporting] = useState<{ file?: LoadedFile } | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -147,7 +148,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
         },
       },
       'separator',
-      { label: 'Excluir linha', icon: Trash2, danger: true, onSelect: () => deleteRow(row.path) },
+      { label: 'Excluir linha', icon: Trash2, danger: true, onSelect: () => setPendingRowDelete(row) },
     ])
   }
 
@@ -313,6 +314,19 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
             setPendingFieldDelete(null)
           }}
           onCancel={() => setPendingFieldDelete(null)}
+        />
+      )}
+      {pendingRowDelete && (
+        <ConfirmDialog
+          title="Excluir linha"
+          danger
+          confirmLabel="Excluir"
+          message={<p className="text-zinc-300">Excluir esta linha? Ela também será removida do GitHub no próximo sync.</p>}
+          onConfirm={() => {
+            void deleteRow(pendingRowDelete.path)
+            setPendingRowDelete(null)
+          }}
+          onCancel={() => setPendingRowDelete(null)}
         />
       )}
     </div>

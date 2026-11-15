@@ -26,13 +26,20 @@ export function Popover({ anchor, onClose, children, className = 'w-72' }: Popov
   })
 
   useEffect(() => {
-    const isOutside = (target: EventTarget | null) =>
-      !ref.current?.contains(target as Node) && !anchor.contains(target as Node)
+    const isOutside = (target: EventTarget | null) => {
+      const node = target as Node | null
+      if (ref.current?.contains(node) || anchor.contains(node)) return false
+      // Keep open while a ConfirmDialog / Modal (native <dialog>) is in use.
+      if (node instanceof Element && node.closest('dialog')) return false
+      return true
+    }
     const onPointerDown = (event: PointerEvent) => {
       if (isOutside(event.target)) onClose()
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      if (document.querySelector('dialog[open]')) return
+      onClose()
     }
     const onScroll = (event: Event) => {
       if (isOutside(event.target)) onClose()
