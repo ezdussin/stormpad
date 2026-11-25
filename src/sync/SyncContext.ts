@@ -5,6 +5,8 @@ import type { SyncState } from './useSync'
 export interface SyncContextValue {
   state: SyncState
   sync: () => Promise<void>
+  /** True while a sync is running or the post-start cooldown is active. */
+  syncBlocked: boolean
   service: GitHubSyncService
 }
 

@@ -42,9 +42,13 @@ function syncLabel(state: SyncState, pending: number, conflicts: number, online:
 
 const railButton = 'relative flex size-10 items-center justify-center rounded-lg transition-colors'
 
+function isSyncShortcut(event: KeyboardEvent): boolean {
+  return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 's'
+}
+
 export function AppShell({ config }: { config: RepoConfig }) {
   const syncValue = useSync(config)
-  const { state, sync } = syncValue
+  const { state, sync, syncBlocked } = syncValue
   const pending = usePendingSync()
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
   const [online, setOnline] = useState(() => navigator.onLine)
@@ -63,8 +67,18 @@ export function AppShell({ config }: { config: RepoConfig }) {
     }
   }, [])
 
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isSyncShortcut(event)) return
+      event.preventDefault()
+      void sync()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [sync])
+
   const fullySynced = state.status === 'idle' && online && pending.total === 0 && Boolean(state.lastSyncAt)
-  const label = syncLabel(state, pending.total, pending.conflicts, online)
+  const label = `${syncLabel(state, pending.total, pending.conflicts, online)} · Ctrl+S`
 
   return (
     <SyncContext.Provider value={syncValue}>
@@ -95,7 +109,7 @@ export function AppShell({ config }: { config: RepoConfig }) {
             <div className="mt-auto flex flex-col items-center gap-1">
               <button
                 onClick={() => void sync()}
-                disabled={state.status === 'syncing'}
+                disabled={syncBlocked || !online}
                 title={label}
                 aria-label={label}
                 className={`${railButton} text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 disabled:opacity-60`}
