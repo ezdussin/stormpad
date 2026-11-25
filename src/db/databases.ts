@@ -48,7 +48,18 @@ export function parseDatabaseSchema(path: string, content: string): SchemaMeta {
     name: typeof file.name === 'string' && file.name ? file.name : 'Sem nome',
     // Every database needs a title column; files edited by hand may have lost it.
     fields: fields.some((field) => field.type === 'title') ? fields : [DEFAULT_TITLE_FIELD, ...fields],
-    view: { filters: Array.isArray(view.filters) ? view.filters : [], sorts: Array.isArray(view.sorts) ? view.sorts : [] },
+    view: {
+      filters: Array.isArray(view.filters) ? view.filters : [],
+      sorts: Array.isArray(view.sorts) ? view.sorts : [],
+      columnWidths:
+        view.columnWidths && typeof view.columnWidths === 'object' && !Array.isArray(view.columnWidths)
+          ? Object.fromEntries(
+              Object.entries(view.columnWidths).filter(
+                (entry): entry is [string, number] => typeof entry[0] === 'string' && typeof entry[1] === 'number',
+              ),
+            )
+          : undefined,
+    },
     createdAt: parseTimestamp(file.created_at),
   }
 }
@@ -339,14 +350,19 @@ export function renameField(path: string, fieldId: string, name: string): Promis
 
 // Row values of the removed field are left in place and dropped the next time each row is saved.
 export function deleteField(path: string, fieldId: string): Promise<void> {
-  return updateSchema(path, (schema) => ({
-    ...schema,
-    fields: schema.fields.filter((field) => field.id !== fieldId),
-    view: {
-      filters: schema.view.filters.filter((filter) => filter.field !== fieldId),
-      sorts: schema.view.sorts.filter((sort) => sort.field !== fieldId),
-    },
-  }))
+  return updateSchema(path, (schema) => {
+    const columnWidths = { ...schema.view.columnWidths }
+    delete columnWidths[fieldId]
+    return {
+      ...schema,
+      fields: schema.fields.filter((field) => field.id !== fieldId),
+      view: {
+        filters: schema.view.filters.filter((filter) => filter.field !== fieldId),
+        sorts: schema.view.sorts.filter((sort) => sort.field !== fieldId),
+        columnWidths: Object.keys(columnWidths).length ? columnWidths : undefined,
+      },
+    }
+  })
 }
 
 /** Moves a field left (-1) or right (+1); the title column always stays first. */
@@ -359,6 +375,25 @@ export function moveField(path: string, fieldId: string, delta: -1 | 1): Promise
     ;[fields[from], fields[to]] = [fields[to], fields[from]]
     return { ...schema, fields }
   })
+}
+
+/** Reorders a non-title field to `toIndex` (title stays at 0). */
+export function reorderField(path: string, fieldId: string, toIndex: number): Promise<void> {
+  return updateSchema(path, (schema) => {
+    const fields = [...schema.fields]
+    const from = fields.findIndex((field) => field.id === fieldId)
+    if (from < 1 || toIndex < 1 || toIndex >= fields.length || from === toIndex) return schema
+    const [item] = fields.splice(from, 1)
+    fields.splice(toIndex, 0, item)
+    return { ...schema, fields }
+  })
+}
+
+export function setColumnWidth(path: string, fieldId: string, width: number): Promise<void> {
+  return setViewConfig(path, (view) => ({
+    ...view,
+    columnWidths: { ...view.columnWidths, [fieldId]: width },
+  }))
 }
 
 function isSelectType(type: FieldType): boolean {

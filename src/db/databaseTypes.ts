@@ -51,6 +51,8 @@ export interface Sort {
 export interface ViewConfig {
   filters: Filter[]
   sorts: Sort[]
+  /** Pixel widths keyed by field id. Missing entries use the UI default. */
+  columnWidths?: Record<string, number>
 }
 
 export const TITLE_FIELD_ID = 'title'

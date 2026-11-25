@@ -15,10 +15,29 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useMemo, useRef, useState, type DragEvent, type MouseEvent, type Ref } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type Ref,
+} from 'react'
 import type { DatabaseRow, DatabaseSchema } from '../../db/db'
 import type { Field, Sort } from '../../db/databaseTypes'
-import { addRow, deleteField, deleteRow, duplicateRow, moveField, setViewConfig, useDatabaseRows } from '../../db/databases'
+import {
+  addRow,
+  deleteField,
+  deleteRow,
+  duplicateRow,
+  moveField,
+  reorderField,
+  setColumnWidth,
+  setViewConfig,
+  useDatabaseRows,
+} from '../../db/databases'
 import { applyView, FILTER_OPS, searchRows } from '../../lib/databaseQuery'
 import { formatOf, loadImportFile, type LoadedFile } from '../../lib/importFile'
 import { ConfirmDialog } from '../Modal'
@@ -29,6 +48,22 @@ import { FieldModal } from './FieldModal'
 import { FIELD_TYPES } from './fieldTypes'
 import { ImportModal } from './ImportModal'
 import { FilterPopover, SortPopover } from './ViewPopovers'
+
+const FIELD_DRAG_TYPE = 'application/x-stormpad-field'
+const MIN_COLUMN_WIDTH = 96
+const MIN_TITLE_WIDTH = 160
+
+function defaultColumnWidth(field: Field): number {
+  if (field.type === 'title') return 256
+  if (field.type === 'checkbox') return 96
+  if (field.type === 'date') return 140
+  if (field.type === 'number') return 120
+  return 176
+}
+
+function minColumnWidth(field: Field): number {
+  return field.type === 'title' ? MIN_TITLE_WIDTH : MIN_COLUMN_WIDTH
+}
 
 interface ToolbarButtonProps {
   icon: LucideIcon
@@ -66,15 +101,38 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
   const [dragging, setDragging] = useState(false)
   const [query, setQuery] = useState('')
   const [findingDuplicates, setFindingDuplicates] = useState(false)
-  const { fields } = schema
+  const [draggingFieldId, setDraggingFieldId] = useState<string | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [widths, setWidths] = useState<Record<string, number>>({})
+  const widthsRef = useRef(widths)
+  const resizeRef = useRef<{ fieldId: string; startX: number; startWidth: number } | null>(null)
+  const fields = schema.fields
+  const savedWidthsKey = JSON.stringify(schema.view.columnWidths ?? {})
+  const fieldIdsKey = fields.map((field) => field.id).join('\0')
+  widthsRef.current = widths
+
+  useEffect(() => {
+    // Skip while the user is dragging a resize handle — live schema updates would snap width back.
+    if (resizeRef.current) return
+    const saved = schema.view.columnWidths ?? {}
+    const next: Record<string, number> = {}
+    for (const field of schema.fields) {
+      next[field.id] = Math.max(minColumnWidth(field), saved[field.id] ?? defaultColumnWidth(field))
+    }
+    setWidths(next)
+    // Intentionally keyed by serialized field ids / widths so live row updates don't reset a drag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fieldIdsKey / savedWidthsKey
+  }, [fieldIdsKey, savedWidthsKey])
 
   function handleDragOver(event: DragEvent) {
+    if (event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) return
     if (!event.dataTransfer.types.includes('Files')) return
     event.preventDefault()
     setDragging(true)
   }
 
   function handleDrop(event: DragEvent) {
+    if (event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) return
     event.preventDefault()
     setDragging(false)
     const file = event.dataTransfer.files[0]
@@ -119,12 +177,17 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
       { label: 'Ordenar decrescente', icon: ArrowDown, onSelect: () => sortBy(field, 'desc') },
       { label: 'Filtrar por este campo', icon: ListFilter, onSelect: () => filterBy(field) },
       'separator',
-      { label: 'Mover para a esquerda', icon: ArrowLeft, disabled: index <= 1, onSelect: () => moveField(schema.path, field.id, -1) },
+      {
+        label: 'Mover para a esquerda',
+        icon: ArrowLeft,
+        disabled: index <= 1,
+        onSelect: () => void moveField(schema.path, field.id, -1),
+      },
       {
         label: 'Mover para a direita',
         icon: ArrowRight,
         disabled: index === 0 || index === fields.length - 1,
-        onSelect: () => moveField(schema.path, field.id, 1),
+        onSelect: () => void moveField(schema.path, field.id, 1),
       },
       'separator',
       {
@@ -150,6 +213,76 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
       'separator',
       { label: 'Excluir linha', icon: Trash2, danger: true, onSelect: () => setPendingRowDelete(row) },
     ])
+  }
+
+  function handleFieldDragStart(event: DragEvent, field: Field, index: number) {
+    if (index === 0) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.setData(FIELD_DRAG_TYPE, field.id)
+    event.dataTransfer.effectAllowed = 'move'
+    setDraggingFieldId(field.id)
+  }
+
+  function handleFieldDragOver(event: DragEvent, index: number) {
+    if (!event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    // Title stays first; drop onto title targets index 1.
+    setDropIndex(Math.max(1, index))
+  }
+
+  function handleFieldDrop(event: DragEvent, index: number) {
+    if (!event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) return
+    event.preventDefault()
+    const fieldId = event.dataTransfer.getData(FIELD_DRAG_TYPE)
+    const toIndex = Math.max(1, index)
+    setDraggingFieldId(null)
+    setDropIndex(null)
+    if (fieldId) void reorderField(schema.path, fieldId, toIndex)
+  }
+
+  function startResize(event: ReactPointerEvent<HTMLDivElement>, field: Field) {
+    event.preventDefault()
+    event.stopPropagation()
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    resizeRef.current = {
+      fieldId: field.id,
+      startX: event.clientX,
+      startWidth: widthsRef.current[field.id] ?? defaultColumnWidth(field),
+    }
+
+    function onPointerMove(moveEvent: PointerEvent) {
+      const resize = resizeRef.current
+      if (!resize) return
+      const currentField = fields.find((item) => item.id === resize.fieldId)
+      if (!currentField) return
+      const width = Math.max(minColumnWidth(currentField), resize.startWidth + (moveEvent.clientX - resize.startX))
+      setWidths((current) => ({ ...current, [resize.fieldId]: width }))
+    }
+
+    function onPointerUp(upEvent: PointerEvent) {
+      handle.releasePointerCapture(upEvent.pointerId)
+      handle.removeEventListener('pointermove', onPointerMove)
+      handle.removeEventListener('pointerup', onPointerUp)
+      handle.removeEventListener('pointercancel', onPointerUp)
+      const resize = resizeRef.current
+      resizeRef.current = null
+      if (!resize) return
+      const currentField = fields.find((item) => item.id === resize.fieldId)
+      if (!currentField) return
+      const width = Math.max(
+        minColumnWidth(currentField),
+        widthsRef.current[resize.fieldId] ?? defaultColumnWidth(currentField),
+      )
+      void setColumnWidth(schema.path, resize.fieldId, width)
+    }
+
+    handle.addEventListener('pointermove', onPointerMove)
+    handle.addEventListener('pointerup', onPointerUp)
+    handle.addEventListener('pointercancel', onPointerUp)
   }
 
   const total = rows?.length ?? 0
@@ -210,23 +343,46 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
       </header>
 
       <div className="flex-1 overflow-auto">
-        <table className="w-max min-w-full border-collapse text-sm">
+        <table className="border-collapse text-sm" style={{ tableLayout: 'fixed', width: 'max-content' }}>
+          <colgroup>
+            {fields.map((field) => (
+              <col
+                key={field.id}
+                style={{ width: widths[field.id] ?? defaultColumnWidth(field), minWidth: minColumnWidth(field) }}
+              />
+            ))}
+            <col style={{ width: 44 }} />
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-zinc-950">
             <tr>
-              {fields.map((field) => {
+              {fields.map((field, index) => {
                 const { icon: Icon } = FIELD_TYPES[field.type]
                 const direction = sortDirection.get(field.id)
+                const width = widths[field.id] ?? defaultColumnWidth(field)
+                const isDropTarget = dropIndex === index && draggingFieldId !== null && draggingFieldId !== field.id
                 return (
                   <th
                     key={field.id}
-                    className={`border-r border-b border-zinc-800 p-0 text-left font-normal ${
-                      field.type === 'title' ? 'min-w-64' : 'min-w-44'
-                    }`}
+                    onDragOver={(e) => handleFieldDragOver(e, index)}
+                    onDrop={(e) => handleFieldDrop(e, index)}
+                    className={`relative border-r border-b border-zinc-800 p-0 text-left font-normal ${
+                      draggingFieldId === field.id ? 'opacity-40' : ''
+                    } ${isDropTarget ? 'bg-sky-500/10' : ''}`}
+                    style={{ width, minWidth: minColumnWidth(field), maxWidth: width }}
                   >
                     <button
+                      type="button"
+                      draggable={index > 0}
+                      onDragStart={(e) => handleFieldDragStart(e, field, index)}
+                      onDragEnd={() => {
+                        setDraggingFieldId(null)
+                        setDropIndex(null)
+                      }}
                       onClick={(e) => openFieldMenu(e, field)}
                       onContextMenu={(e) => openFieldMenu(e, field)}
-                      className="flex w-full items-center gap-1.5 px-2 py-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                      className={`flex w-full items-center gap-1.5 px-2 py-1.5 pr-3 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 ${
+                        index > 0 ? 'cursor-grab active:cursor-grabbing' : ''
+                      }`}
                     >
                       <Icon size={14} className="shrink-0" />
                       <span className="truncate">{field.name}</span>
@@ -236,11 +392,25 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
                         </span>
                       )}
                     </button>
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Arraste para redimensionar"
+                      onPointerDown={(e) => startResize(e, field)}
+                      onDragStart={(e) => e.preventDefault()}
+                      className="absolute inset-y-0 -right-1 z-30 w-3 cursor-col-resize touch-none select-none hover:bg-sky-500/40"
+                    />
                   </th>
                 )
               })}
-              <th className="w-full border-b border-zinc-800 p-0 text-left">
+              <th
+                className="border-b border-zinc-800 p-0 text-left"
+                style={{ width: 44 }}
+                onDragOver={(e) => handleFieldDragOver(e, fields.length - 1)}
+                onDrop={(e) => handleFieldDrop(e, fields.length - 1)}
+              >
                 <button
+                  type="button"
                   onClick={() => setFieldModal({})}
                   title="Adicionar campo"
                   className="px-3 py-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200"
@@ -253,22 +423,30 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.path} onContextMenu={(e) => openRowMenu(e, row)} className="hover:bg-zinc-900/40">
-                {fields.map((field) => (
-                  <td key={field.id} className="max-w-80 border-r border-b border-zinc-800 p-0 align-top">
-                    <Cell
-                      schemaPath={schema.path}
-                      field={field}
-                      row={row}
-                      autoEdit={row.path === newRowPath && field.type === 'title'}
-                    />
-                  </td>
-                ))}
-                <td className="border-b border-zinc-800" />
+                {fields.map((field) => {
+                  const width = widths[field.id] ?? defaultColumnWidth(field)
+                  return (
+                    <td
+                      key={field.id}
+                      className="overflow-hidden border-r border-b border-zinc-800 p-0 align-top"
+                      style={{ width, minWidth: minColumnWidth(field), maxWidth: width }}
+                    >
+                      <Cell
+                        schemaPath={schema.path}
+                        field={field}
+                        row={row}
+                        autoEdit={row.path === newRowPath && field.type === 'title'}
+                      />
+                    </td>
+                  )
+                })}
+                <td className="border-b border-zinc-800" style={{ width: 44 }} />
               </tr>
             ))}
             <tr>
               <td colSpan={fields.length + 1} className="p-0">
                 <button
+                  type="button"
                   onClick={async () => setNewRowPath(await addRow(schema.dir))}
                   className="flex w-full items-center gap-1.5 px-2 py-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
                 >
