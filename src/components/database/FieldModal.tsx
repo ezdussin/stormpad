@@ -20,7 +20,6 @@ export function FieldModal({ schemaPath, field, onClose }: FieldModalProps) {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!name.trim()) return setError('Informe um nome.')
     if (!field) {
       await addField(schemaPath, name, type)
     } else {
@@ -47,7 +46,9 @@ export function FieldModal({ schemaPath, field, onClose }: FieldModalProps) {
     >
       <form id={formId} onSubmit={handleSubmit} className="space-y-4">
         <label className="block space-y-1">
-          <span className="text-zinc-400">Nome</span>
+          <span className="text-zinc-400">
+            Nome <span className="text-zinc-600">(opcional)</span>
+          </span>
           <input
             data-autofocus
             value={name}
@@ -55,6 +56,7 @@ export function FieldModal({ schemaPath, field, onClose }: FieldModalProps) {
               setName(e.target.value)
               setError(null)
             }}
+            placeholder="Sem nome"
             className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-sky-500"
           />
         </label>

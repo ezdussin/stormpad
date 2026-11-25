@@ -4,6 +4,7 @@ import {
   Copy,
   FolderInput,
   MoreHorizontal,
+  PanelRightOpen,
   Pencil,
   Pin,
   PinOff,
@@ -19,7 +20,6 @@ import {
   addMemory,
   deleteList,
   deleteMemory,
-  editMemory,
   moveList,
   moveMemory,
   renameList,
@@ -35,6 +35,7 @@ import { TextPromptModal } from '../TextPromptModal'
 import { useContextMenu } from '../useContextMenu'
 import { MEMORY_DRAG_TYPE, rowsFor } from './boardShared'
 import { MemoryCard } from './MemoryCard'
+import { MemoryDetailDrawer } from './MemoryDetailDrawer'
 
 /** Pinned first, then newest first. */
 function byPinThenNewest(a: Memory, b: Memory): number {
@@ -49,7 +50,7 @@ export function MemoriesView() {
   const deepLinkMemoryId = useLiveQuery(() => getSetting('deep_link_memory_id'), [])
   const [draft, setDraft] = useState('')
   const [draftListId, setDraftListId] = useState<string | null>(null)
-  const [editingPath, setEditingPath] = useState<string | null>(null)
+  const [openPath, setOpenPath] = useState<string | null>(null)
   const [draggingPath, setDraggingPath] = useState<string | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
 
@@ -115,8 +116,8 @@ export function MemoriesView() {
       .filter((list) => list.id !== listId)
       .map((list) => ({ label: `Mover para ${list.name}`, icon: FolderInput, onSelect: () => moveMemory(memory.path, list.id) }))
     menu.open(event, [
+      { label: 'Abrir', icon: PanelRightOpen, onSelect: () => setOpenPath(memory.path) },
       { label: 'Copiar texto', icon: Copy, onSelect: () => copyText(memory.body) },
-      { label: 'Editar', icon: Pencil, onSelect: () => setEditingPath(memory.path) },
       {
         label: memory.pinned ? 'Desafixar' : 'Fixar no topo',
         icon: memory.pinned ? PinOff : Pin,
@@ -190,20 +191,15 @@ export function MemoriesView() {
                   <MemoryCard
                     key={memory.path}
                     memory={memory}
-                    editing={editingPath === memory.path}
                     dragging={draggingPath === memory.path}
                     highlighted={highlightId === memory.id}
+                    onOpen={() => setOpenPath(memory.path)}
                     onMenu={(event) => openCardMenu(event, memory, list.id)}
                     onDragStart={() => setDraggingPath(memory.path)}
                     onDragEnd={() => {
                       setDraggingPath(null)
                       setDropListId(null)
                     }}
-                    onSave={(body) => {
-                      void editMemory(memory.path, body)
-                      setEditingPath(null)
-                    }}
-                    onCancelEdit={() => setEditingPath(null)}
                   />
                 ))}
                 {cards.length === 0 && (
@@ -306,12 +302,14 @@ export function MemoriesView() {
             </p>
           }
           onConfirm={() => {
+            if (openPath === pendingDelete.path) setOpenPath(null)
             void deleteMemory(pendingDelete.path)
             setPendingDelete(null)
           }}
           onCancel={() => setPendingDelete(null)}
         />
       )}
+      {openPath && <MemoryDetailDrawer path={openPath} onClose={() => setOpenPath(null)} />}
     </div>
   )
 }

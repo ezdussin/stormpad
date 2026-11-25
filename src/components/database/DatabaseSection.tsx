@@ -1,7 +1,9 @@
-import { Database, FileUp, Pencil, Plus, Table2, Trash2 } from 'lucide-react'
+import { Database, FileUp, Pencil, Plus, Smile, Trash2 } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
 import type { DatabaseSchema } from '../../db/db'
-import { createDatabase, deleteDatabase, renameDatabase, useDatabases } from '../../db/databases'
+import { createDatabase, deleteDatabase, renameDatabase, setDatabaseIcon, useDatabases } from '../../db/databases'
+import { DEFAULT_DATABASE_ICON, resolveAppIcon, type AppIconId } from '../../lib/appIcons'
+import { IconPickerModal } from '../IconPickerModal'
 import { ConfirmDialog } from '../Modal'
 import { TextPromptModal } from '../TextPromptModal'
 import { useContextMenu } from '../useContextMenu'
@@ -16,11 +18,13 @@ export function DatabaseSection() {
   const [importing, setImporting] = useState(false)
   const [renaming, setRenaming] = useState<DatabaseSchema | null>(null)
   const [pendingDelete, setPendingDelete] = useState<DatabaseSchema | null>(null)
+  const [iconTarget, setIconTarget] = useState<DatabaseSchema | null>(null)
   const selected = databases?.find((schema) => schema.path === selectedPath) ?? databases?.[0] ?? null
 
   function openMenu(event: MouseEvent, schema: DatabaseSchema) {
     menu.open(event, [
       { label: 'Renomear', icon: Pencil, onSelect: () => setRenaming(schema) },
+      { label: 'Alterar ícone', icon: Smile, onSelect: () => setIconTarget(schema) },
       'separator',
       { label: 'Excluir banco', icon: Trash2, danger: true, onSelect: () => setPendingDelete(schema) },
     ])
@@ -43,21 +47,26 @@ export function DatabaseSection() {
           </button>
         </div>
         <ul className="flex-1 overflow-y-auto py-1">
-          {databases?.map((schema) => (
-            <li key={schema.path}>
-              <button
-                onClick={() => setSelectedPath(schema.path)}
-                onContextMenu={(e) => openMenu(e, schema)}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-zinc-900 ${
-                  schema.path === selected?.path ? 'bg-zinc-900 text-zinc-50' : 'text-zinc-300'
-                }`}
-              >
-                <Table2 size={15} className="shrink-0 text-zinc-500" />
-                <span className="min-w-0 flex-1 truncate">{schema.name}</span>
-                {schema.syncStatus !== 'synced' && <span title="Ainda não enviado" className="size-2 shrink-0 rounded-full bg-sky-400" />}
-              </button>
-            </li>
-          ))}
+          {databases?.map((schema) => {
+            const SchemaIcon = resolveAppIcon(schema.icon, DEFAULT_DATABASE_ICON)
+            return (
+              <li key={schema.path}>
+                <button
+                  onClick={() => setSelectedPath(schema.path)}
+                  onContextMenu={(e) => openMenu(e, schema)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-zinc-900 ${
+                    schema.path === selected?.path ? 'bg-zinc-900 text-zinc-50' : 'text-zinc-300'
+                  }`}
+                >
+                  <SchemaIcon size={15} className="shrink-0 text-zinc-500" />
+                  <span className="min-w-0 flex-1 truncate">{schema.name}</span>
+                  {schema.syncStatus !== 'synced' && (
+                    <span title="Ainda não enviado" className="size-2 shrink-0 rounded-full bg-sky-400" />
+                  )}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </aside>
 
@@ -123,6 +132,14 @@ export function DatabaseSection() {
             setPendingDelete(null)
           }}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {iconTarget && (
+        <IconPickerModal
+          value={iconTarget.icon}
+          fallback="database"
+          onSelect={(icon: AppIconId | null) => void setDatabaseIcon(iconTarget.path, icon)}
+          onClose={() => setIconTarget(null)}
         />
       )}
     </div>

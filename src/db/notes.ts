@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
-import { newNoteContent, parseNoteMeta, setFrontmatterField } from '../lib/frontmatter'
+import { newNoteContent, parseNoteMeta, setFrontmatterField, upsertFrontmatterField } from '../lib/frontmatter'
 import {
   dirOf,
   fileNameOf,
@@ -166,6 +166,22 @@ export async function deleteNote(path: string): Promise<void> {
   } else {
     await db.notes.update(path, { syncStatus: 'deleted', updatedAt: Date.now() })
   }
+}
+
+export async function setNoteIcon(path: string, icon: string | null): Promise<void> {
+  await db.transaction('rw', db.notes, async () => {
+    const note = await db.notes.get(path)
+    if (!note || note.syncStatus === 'deleted') return
+    const content = icon
+      ? upsertFrontmatterField(note.content, 'icon', `"${icon}"`)
+      : upsertFrontmatterField(note.content, 'icon', '""')
+    await db.notes.update(path, {
+      content,
+      updatedAt: Date.now(),
+      syncStatus: 'dirty',
+      ...parseNoteMeta(path, content),
+    })
+  })
 }
 
 // ---- folders (path prefixes; empty ones kept in settings) --------------------

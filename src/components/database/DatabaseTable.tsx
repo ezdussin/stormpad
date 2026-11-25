@@ -8,6 +8,7 @@ import {
   CopyPlus,
   FileUp,
   ListFilter,
+  PanelRightOpen,
   Pencil,
   Plus,
   Search,
@@ -47,6 +48,7 @@ import { DuplicatesModal } from './DuplicatesModal'
 import { FieldModal } from './FieldModal'
 import { FIELD_TYPES } from './fieldTypes'
 import { ImportModal } from './ImportModal'
+import { RowDetailDrawer } from './RowDetailDrawer'
 import { FilterPopover, SortPopover } from './ViewPopovers'
 
 const FIELD_DRAG_TYPE = 'application/x-stormpad-field'
@@ -103,6 +105,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
   const [findingDuplicates, setFindingDuplicates] = useState(false)
   const [draggingFieldId, setDraggingFieldId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [openRowPath, setOpenRowPath] = useState<string | null>(null)
   const [widths, setWidths] = useState<Record<string, number>>({})
   const widthsRef = useRef(widths)
   const resizeRef = useRef<{ fieldId: string; startX: number; startWidth: number } | null>(null)
@@ -180,13 +183,13 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
       {
         label: 'Mover para a esquerda',
         icon: ArrowLeft,
-        disabled: index <= 1,
+        disabled: index === 0,
         onSelect: () => void moveField(schema.path, field.id, -1),
       },
       {
         label: 'Mover para a direita',
         icon: ArrowRight,
-        disabled: index === 0 || index === fields.length - 1,
+        disabled: index === fields.length - 1,
         onSelect: () => void moveField(schema.path, field.id, 1),
       },
       'separator',
@@ -202,6 +205,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
 
   function openRowMenu(event: MouseEvent, row: DatabaseRow) {
     menu.open(event, [
+      { label: 'Abrir', icon: PanelRightOpen, onSelect: () => setOpenRowPath(row.path) },
       {
         label: 'Duplicar linha',
         icon: CopyPlus,
@@ -215,11 +219,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
     ])
   }
 
-  function handleFieldDragStart(event: DragEvent, field: Field, index: number) {
-    if (index === 0) {
-      event.preventDefault()
-      return
-    }
+  function handleFieldDragStart(event: DragEvent, field: Field) {
     event.dataTransfer.setData(FIELD_DRAG_TYPE, field.id)
     event.dataTransfer.effectAllowed = 'move'
     setDraggingFieldId(field.id)
@@ -229,18 +229,16 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
     if (!event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
-    // Title stays first; drop onto title targets index 1.
-    setDropIndex(Math.max(1, index))
+    setDropIndex(index)
   }
 
   function handleFieldDrop(event: DragEvent, index: number) {
     if (!event.dataTransfer.types.includes(FIELD_DRAG_TYPE)) return
     event.preventDefault()
     const fieldId = event.dataTransfer.getData(FIELD_DRAG_TYPE)
-    const toIndex = Math.max(1, index)
     setDraggingFieldId(null)
     setDropIndex(null)
-    if (fieldId) void reorderField(schema.path, fieldId, toIndex)
+    if (fieldId) void reorderField(schema.path, fieldId, index)
   }
 
   function startResize(event: ReactPointerEvent<HTMLDivElement>, field: Field) {
@@ -372,20 +370,20 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
                   >
                     <button
                       type="button"
-                      draggable={index > 0}
-                      onDragStart={(e) => handleFieldDragStart(e, field, index)}
+                      draggable
+                      onDragStart={(e) => handleFieldDragStart(e, field)}
                       onDragEnd={() => {
                         setDraggingFieldId(null)
                         setDropIndex(null)
                       }}
                       onClick={(e) => openFieldMenu(e, field)}
                       onContextMenu={(e) => openFieldMenu(e, field)}
-                      className={`flex w-full items-center gap-1.5 px-2 py-1.5 pr-3 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 ${
-                        index > 0 ? 'cursor-grab active:cursor-grabbing' : ''
-                      }`}
+                      className="flex w-full cursor-grab items-center gap-1.5 px-2 py-1.5 pr-3 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 active:cursor-grabbing"
                     >
                       <Icon size={14} className="shrink-0" />
-                      <span className="truncate">{field.name}</span>
+                      <span className={`truncate ${field.name.trim() ? '' : 'italic text-zinc-600'}`}>
+                        {field.name.trim() || 'Sem nome'}
+                      </span>
                       {direction && (
                         <span className="ml-auto text-sky-400">
                           {direction === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
@@ -423,7 +421,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.path} onContextMenu={(e) => openRowMenu(e, row)} className="hover:bg-zinc-900/40">
-                {fields.map((field) => {
+                {fields.map((field, index) => {
                   const width = widths[field.id] ?? defaultColumnWidth(field)
                   return (
                     <td
@@ -431,12 +429,29 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
                       className="overflow-hidden border-r border-b border-zinc-800 p-0 align-top"
                       style={{ width, minWidth: minColumnWidth(field), maxWidth: width }}
                     >
-                      <Cell
-                        schemaPath={schema.path}
-                        field={field}
-                        row={row}
-                        autoEdit={row.path === newRowPath && field.type === 'title'}
-                      />
+                      <div className="flex items-start">
+                        <div className="min-w-0 flex-1">
+                          <Cell
+                            schemaPath={schema.path}
+                            field={field}
+                            row={row}
+                            autoEdit={row.path === newRowPath && field.type === 'title'}
+                          />
+                        </div>
+                        {index === 0 && (
+                          <button
+                            type="button"
+                            title="Abrir detalhes"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setOpenRowPath(row.path)
+                            }}
+                            className="mr-1 mt-1 shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                          >
+                            <PanelRightOpen size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   )
                 })}
@@ -501,11 +516,15 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
           confirmLabel="Excluir"
           message={<p className="text-zinc-300">Excluir esta linha? Ela também será removida do GitHub no próximo sync.</p>}
           onConfirm={() => {
+            if (openRowPath === pendingRowDelete.path) setOpenRowPath(null)
             void deleteRow(pendingRowDelete.path)
             setPendingRowDelete(null)
           }}
           onCancel={() => setPendingRowDelete(null)}
         />
+      )}
+      {openRowPath && (
+        <RowDetailDrawer schema={schema} rowPath={openRowPath} onClose={() => setOpenRowPath(null)} />
       )}
     </div>
   )

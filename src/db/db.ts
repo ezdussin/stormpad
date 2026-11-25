@@ -15,6 +15,8 @@ export interface TextFile {
 export interface Note extends TextFile {
   title: string
   tags: string[]
+  /** Lucide icon id; null uses the default note icon. */
+  icon: string | null
 }
 
 export interface Memory extends TextFile {
@@ -53,6 +55,8 @@ export interface DatabaseSchema extends TextFile {
   /** Folder of the database, e.g. `databases/tarefas-1a2b3c4d/`. */
   dir: string
   name: string
+  /** Lucide icon id; null uses the default database icon. */
+  icon: string | null
   fields: Field[]
   view: ViewConfig
   createdAt: number
@@ -63,6 +67,8 @@ export interface DatabaseRow extends TextFile {
   id: string
   dir: string
   values: Record<string, CellValue>
+  /** Freeform Markdown notes for the row (Notion-style page body). */
+  notes: string
   createdAt: number
 }
 
@@ -90,6 +96,7 @@ export type SettingKey =
   | 'deep_link_memory_id'
   | 'note_folders'
   | 'note_folders_expanded'
+  | 'note_current_folder'
 
 export interface Setting {
   key: SettingKey

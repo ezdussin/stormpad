@@ -39,18 +39,21 @@ export function Popover({ anchor, onClose, children, className = 'w-72' }: Popov
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (document.querySelector('dialog[open]')) return
+      event.preventDefault()
+      event.stopPropagation()
       onClose()
     }
     const onScroll = (event: Event) => {
       if (isOutside(event.target)) onClose()
     }
     window.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('keydown', onKeyDown)
+    // Capture so Escape closes the popover before a parent drawer handles it.
+    window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onClose)
     return () => {
       window.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', onClose)
     }
@@ -59,7 +62,7 @@ export function Popover({ anchor, onClose, children, className = 'w-72' }: Popov
   return createPortal(
     <div
       ref={ref}
-      className={`fixed top-0 left-0 z-40 rounded-lg border border-zinc-700 bg-zinc-900 text-sm text-zinc-100 shadow-xl shadow-black/40 ${className}`}
+      className={`fixed top-0 left-0 z-[70] rounded-lg border border-zinc-700 bg-zinc-900 text-sm text-zinc-100 shadow-xl shadow-black/40 ${className}`}
     >
       {children}
     </div>,

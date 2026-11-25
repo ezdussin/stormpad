@@ -1,6 +1,5 @@
 import {
   AlignLeft,
-  ChevronDown,
   ChevronRight,
   ClipboardCopy,
   CopyPlus,
@@ -17,6 +16,7 @@ import {
   PencilLine,
   Plus,
   RefreshCw,
+  Smile,
   SlidersHorizontal,
   Trash2,
 } from 'lucide-react'
@@ -28,20 +28,30 @@ import {
   deleteNote,
   duplicateNote,
   folderLabel,
-  useExpandedNoteFolders,
+  setNoteIcon,
   useNote,
   useNoteFolders,
   useNotes,
 } from '../db/notes'
+import { DEFAULT_NOTE_ICON, resolveAppIcon, type AppIconId } from '../lib/appIcons'
 import { getSetting, setSetting, type RepoConfig } from '../db/settings'
 import { copyText } from '../lib/clipboard'
 import { stripFrontmatter } from '../lib/frontmatter'
-import { dirOf, fileNameOf, NOTES_ROOT } from '../lib/paths'
+import {
+  childFolderName,
+  childFoldersOf,
+  dirOf,
+  fileNameOf,
+  folderBreadcrumbs,
+  normalizeNoteFolder,
+  NOTES_ROOT,
+} from '../lib/paths'
 import { openExternal } from '../lib/openExternal'
 import { normalizeTags } from '../lib/tags'
 import { useSyncContext } from '../sync/SyncContext'
 import type { MenuEntry } from './ContextMenu'
 import { isToggleModeShortcut, TOGGLE_MODE_SHORTCUT, type EditorMode } from './editorMode'
+import { IconPickerModal } from './IconPickerModal'
 import { ConfirmDialog } from './Modal'
 import { MoveNoteModal, NewFolderModal, NewNoteModal, RenameNoteModal } from './NoteDialogs'
 import { NoteEditor } from './NoteEditor'
@@ -76,60 +86,12 @@ function matches(note: Note, query: string): boolean {
   )
 }
 
-interface FolderNode {
-  path: string
-  name: string
-  children: FolderNode[]
-  notes: Note[]
-}
-
-function buildFolderTree(folders: string[], notes: Note[]): FolderNode[] {
-  const byPath = new Map<string, FolderNode>()
-
-  function ensure(folder: string): FolderNode {
-    const path = folder.endsWith('/') ? folder : `${folder}/`
-    let node = byPath.get(path)
-    if (node) return node
-    const label = folderLabel(path)
-    node = { path, name: label.includes('/') ? label.slice(label.lastIndexOf('/') + 1) : label, children: [], notes: [] }
-    byPath.set(path, node)
-    return node
-  }
-
-  for (const folder of folders) ensure(folder)
-
-  for (const folder of [...byPath.keys()]) {
-    if (folder === NOTES_ROOT) continue
-    const parentPath = dirOf(folder.slice(0, -1))
-    if (!parentPath.startsWith(NOTES_ROOT)) continue
-    const parent = ensure(parentPath === NOTES_ROOT ? NOTES_ROOT : parentPath)
-    const child = byPath.get(folder)!
-    if (parent.path !== child.path && !parent.children.includes(child)) parent.children.push(child)
-  }
-
-  for (const note of notes) {
-    const folder = dirOf(note.path)
-    ensure(folder).notes.push(note)
-  }
-
-  for (const node of byPath.values()) {
-    node.children.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-    node.notes.sort((a, b) => b.updatedAt - a.updatedAt)
-  }
-
-  const roots = [...byPath.values()].filter((node) => {
-    if (node.path === NOTES_ROOT) return false
-    const parentPath = dirOf(node.path.slice(0, -1))
-    return parentPath === NOTES_ROOT || !byPath.has(parentPath)
-  })
-
-  return roots.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-}
+const rowClass =
+  'flex h-11 w-full shrink-0 items-center gap-2.5 px-3 text-left text-sm hover:bg-zinc-900'
 
 export function NotesShell({ config }: { config: RepoConfig }) {
   const notes = useNotes()
   const folders = useNoteFolders()
-  const { expanded, toggle: toggleFolder } = useExpandedNoteFolders()
   const { state, sync } = useSyncContext()
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -141,10 +103,22 @@ export function NotesShell({ config }: { config: RepoConfig }) {
   const [creatingInFolder, setCreatingInFolder] = useState<string | null>(null)
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [movingPath, setMovingPath] = useState<string | null>(null)
+  const [iconPath, setIconPath] = useState<string | null>(null)
   const tagSuggestions = useMemo(() => normalizeTags(notes?.flatMap((note) => note.tags) ?? []), [notes])
   const propertiesNote = notes?.find((note) => note.path === propertiesPath)
   const savedMode = useLiveQuery(() => getSetting('editor_mode'))
   const mode: EditorMode = savedMode === 'code' ? 'code' : 'rich'
+  const savedFolder = useLiveQuery(() => getSetting('note_current_folder'), [], 'loading' as const)
+  const currentFolder =
+    savedFolder === 'loading'
+      ? NOTES_ROOT
+      : savedFolder
+        ? normalizeNoteFolder(savedFolder)
+        : NOTES_ROOT
+
+  function setCurrentFolder(folder: string) {
+    void setSetting('note_current_folder', normalizeNoteFolder(folder))
+  }
 
   function toggleMode() {
     void setSetting('editor_mode', mode === 'code' ? 'rich' : 'code')
@@ -160,12 +134,21 @@ export function NotesShell({ config }: { config: RepoConfig }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [mode])
 
-  const visibleNotes = useMemo(
-    () => (query ? notes?.filter((note) => matches(note, query)) : notes) ?? [],
-    [notes, query],
+  const searching = query.trim().length > 0
+
+  const childFolders = useMemo(() => childFoldersOf(currentFolder, folders), [currentFolder, folders])
+
+  const folderNotes = useMemo(() => {
+    const list = (notes ?? []).filter((note) => dirOf(note.path) === currentFolder)
+    return list.sort((a, b) => b.updatedAt - a.updatedAt)
+  }, [notes, currentFolder])
+
+  const searchNotes = useMemo(
+    () => (searching ? (notes?.filter((note) => matches(note, query)) ?? []) : []),
+    [notes, query, searching],
   )
 
-  const tree = useMemo(() => buildFolderTree(folders, query ? visibleNotes : (notes ?? [])), [folders, notes, query, visibleNotes])
+  const breadcrumbs = useMemo(() => folderBreadcrumbs(currentFolder), [currentFolder])
 
   async function confirmDelete(note: Note) {
     setPendingDelete(null)
@@ -176,6 +159,11 @@ export function NotesShell({ config }: { config: RepoConfig }) {
   async function handleDuplicate(path: string) {
     const copyPath = await duplicateNote(path)
     if (copyPath) setSelectedPath(copyPath)
+  }
+
+  function openNote(path: string) {
+    setSelectedPath(path)
+    setCurrentFolder(dirOf(path))
   }
 
   function noteActions(note: Note): MenuEntry[] {
@@ -193,6 +181,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
       },
       'separator',
       { label: 'Renomear', icon: PencilLine, onSelect: () => setRenamingPath(note.path) },
+      { label: 'Alterar ícone', icon: Smile, onSelect: () => setIconPath(note.path) },
       { label: 'Mover para…', icon: FolderInput, onSelect: () => setMovingPath(note.path) },
       { label: 'Propriedades', icon: SlidersHorizontal, onSelect: () => setPropertiesPath(note.path) },
       { label: 'Duplicar', icon: CopyPlus, onSelect: () => handleDuplicate(note.path) },
@@ -202,7 +191,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
 
   function openNoteMenu(event: MouseEvent, note: Note) {
     menu.open(event, [
-      { label: 'Abrir', icon: FileText, disabled: note.path === selectedPath, onSelect: () => setSelectedPath(note.path) },
+      { label: 'Abrir', icon: FileText, disabled: note.path === selectedPath, onSelect: () => openNote(note.path) },
       'separator',
       { label: 'Copiar conteúdo (Markdown)', icon: ClipboardCopy, onSelect: () => copyText(note.content) },
       {
@@ -218,6 +207,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
     event.preventDefault()
     event.stopPropagation()
     menu.open(event, [
+      { label: 'Abrir pasta', icon: Folder, onSelect: () => setCurrentFolder(folder) },
       { label: 'Nova nota nesta pasta', icon: Plus, onSelect: () => setCreatingInFolder(folder) },
       { label: 'Nova subpasta', icon: FolderPlus, onSelect: () => setCreatingFolder(folder) },
     ])
@@ -225,8 +215,8 @@ export function NotesShell({ config }: { config: RepoConfig }) {
 
   function openListMenu(event: MouseEvent) {
     menu.open(event, [
-      { label: 'Nova nota', icon: Plus, onSelect: () => setCreatingInFolder(DEFAULT_NOTE_FOLDER) },
-      { label: 'Nova pasta', icon: FolderPlus, onSelect: () => setCreatingFolder(NOTES_ROOT) },
+      { label: 'Nova nota', icon: Plus, onSelect: () => setCreatingInFolder(currentFolder === NOTES_ROOT ? DEFAULT_NOTE_FOLDER : currentFolder) },
+      { label: 'Nova pasta', icon: FolderPlus, onSelect: () => setCreatingFolder(currentFolder) },
       {
         label: 'Sincronizar agora',
         icon: RefreshCw,
@@ -236,73 +226,40 @@ export function NotesShell({ config }: { config: RepoConfig }) {
     ])
   }
 
-  function renderFolder(node: FolderNode, depth: number) {
-    const isOpen = query ? true : expanded.has(node.path)
-    const paddingLeft = 8 + depth * 12
-
+  function renderNoteRow(note: Note, showFolder: boolean) {
+    const NoteIcon = resolveAppIcon(note.icon, DEFAULT_NOTE_ICON)
     return (
-      <li key={node.path}>
-        <div
-          className="group flex w-full items-center gap-1 px-1 py-1 text-left text-sm text-zinc-300 hover:bg-zinc-900"
-          style={{ paddingLeft }}
-          onContextMenu={(e) => openFolderMenu(e, node.path)}
+      <li key={note.path}>
+        <button
+          type="button"
+          onClick={() => openNote(note.path)}
+          onContextMenu={(e) => openNoteMenu(e, note)}
+          className={`${rowClass} ${note.path === selectedPath ? 'bg-zinc-900' : ''}`}
         >
-          <button
-            type="button"
-            onClick={() => toggleFolder(node.path)}
-            title={isOpen ? 'Recolher' : 'Expandir'}
-            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-          >
-            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
-          <Folder size={14} className="shrink-0 text-zinc-500" />
-          <button
-            type="button"
-            onClick={() => toggleFolder(node.path)}
-            className="min-w-0 flex-1 truncate text-left font-medium"
-          >
-            {node.name}
-          </button>
-          <span className="pr-2 text-[11px] text-zinc-600">{node.notes.length}</span>
-        </div>
-        {isOpen && (
-          <ul>
-            {node.children.map((child) => renderFolder(child, depth + 1))}
-            {node.notes.map((note) => (
-              <li key={note.path}>
-                <button
-                  onClick={() => setSelectedPath(note.path)}
-                  onContextMenu={(e) => openNoteMenu(e, note)}
-                  style={{ paddingLeft: paddingLeft + 22 }}
-                  className={`group flex w-full items-center gap-2 py-1.5 pr-3 text-left text-sm hover:bg-zinc-900 ${
-                    note.path === selectedPath ? 'bg-zinc-900' : ''
-                  }`}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{fileNameOf(note.path)}</span>
-                    <span
-                      className="block truncate text-xs text-zinc-500"
-                      title={new Date(note.updatedAt).toLocaleString()}
-                    >
-                      {formatNoteDate(note.updatedAt)}
-                    </span>
-                  </span>
-                  {note.syncStatus !== 'synced' && (
-                    <span
-                      title={note.syncStatus}
-                      className={`size-2 shrink-0 rounded-full ${
-                        note.syncStatus === 'conflict' ? 'bg-amber-400' : 'bg-sky-400'
-                      }`}
-                    />
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+          <NoteIcon size={16} className="shrink-0 text-zinc-500" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{fileNameOf(note.path)}</span>
+            <span className="block truncate text-xs text-zinc-500" title={new Date(note.updatedAt).toLocaleString()}>
+              {showFolder ? `${folderLabel(dirOf(note.path))} · ` : ''}
+              {formatNoteDate(note.updatedAt)}
+            </span>
+          </span>
+          {note.syncStatus !== 'synced' && (
+            <span
+              title={note.syncStatus}
+              className={`size-2 shrink-0 rounded-full ${note.syncStatus === 'conflict' ? 'bg-amber-400' : 'bg-sky-400'}`}
+            />
+          )}
+        </button>
       </li>
     )
   }
+
+  const iconNote = notes?.find((note) => note.path === iconPath)
+
+  const empty = searching
+    ? searchNotes.length === 0
+    : childFolders.length === 0 && folderNotes.length === 0
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -316,14 +273,16 @@ export function NotesShell({ config }: { config: RepoConfig }) {
               onChange={(e) => setQuery(e.target.value)}
             />
             <button
-              onClick={() => setCreatingFolder(NOTES_ROOT)}
+              onClick={() => setCreatingFolder(currentFolder)}
               title="Nova pasta"
               className="rounded-md p-1.5 hover:bg-zinc-800"
             >
               <FolderPlus size={18} />
             </button>
             <button
-              onClick={() => setCreatingInFolder(DEFAULT_NOTE_FOLDER)}
+              onClick={() =>
+                setCreatingInFolder(currentFolder === NOTES_ROOT ? DEFAULT_NOTE_FOLDER : currentFolder)
+              }
               title="Nova nota"
               className="rounded-md p-1.5 hover:bg-zinc-800"
             >
@@ -331,12 +290,61 @@ export function NotesShell({ config }: { config: RepoConfig }) {
             </button>
           </div>
 
+          {!searching && (
+            <nav className="flex flex-wrap items-center gap-0.5 border-b border-zinc-800 px-2 py-2 text-xs">
+              {breadcrumbs.map((crumb, index) => {
+                const last = index === breadcrumbs.length - 1
+                return (
+                  <span key={crumb.path} className="flex items-center gap-0.5">
+                    {index > 0 && <ChevronRight size={12} className="text-zinc-600" />}
+                    <button
+                      type="button"
+                      disabled={last}
+                      onClick={() => setCurrentFolder(crumb.path)}
+                      className={`max-w-28 truncate rounded px-1.5 py-0.5 ${
+                        last
+                          ? 'font-medium text-zinc-200'
+                          : 'text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200'
+                      }`}
+                    >
+                      {crumb.label}
+                    </button>
+                  </span>
+                )
+              })}
+            </nav>
+          )}
+
           <ul className="flex-1 overflow-y-auto py-1" onContextMenu={openListMenu}>
-            {tree.length === 0 ? (
-              <li className="px-3 py-6 text-center text-xs text-zinc-600">Nenhuma nota ainda.</li>
-            ) : (
-              tree.map((node) => renderFolder(node, 0))
+            {empty && (
+              <li className="px-3 py-6 text-center text-xs text-zinc-600">
+                {searching ? `Nada encontrado para “${query.trim()}”.` : 'Pasta vazia.'}
+              </li>
             )}
+
+            {searching
+              ? searchNotes.map((note) => renderNoteRow(note, true))
+              : (
+                  <>
+                    {childFolders.map((folder) => (
+                      <li key={folder}>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentFolder(folder)}
+                          onContextMenu={(e) => openFolderMenu(e, folder)}
+                          className={rowClass}
+                        >
+                          <Folder size={16} className="shrink-0 text-sky-500/80" />
+                          <span className="min-w-0 flex-1 truncate font-medium text-zinc-200">
+                            {childFolderName(currentFolder, folder)}
+                          </span>
+                          <ChevronRight size={14} className="shrink-0 text-zinc-600" />
+                        </button>
+                      </li>
+                    ))}
+                    {folderNotes.map((note) => renderNoteRow(note, false))}
+                  </>
+                )}
           </ul>
         </aside>
 
@@ -394,7 +402,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
           initialFolder={creatingInFolder}
           onCreated={(path) => {
             setCreatingInFolder(null)
-            setSelectedPath(path)
+            openNote(path)
           }}
           onClose={() => setCreatingInFolder(null)}
         />
@@ -404,7 +412,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
           parentFolder={creatingFolder}
           onCreated={(folder) => {
             setCreatingFolder(null)
-            if (!expanded.has(folder)) toggleFolder(folder)
+            setCurrentFolder(folder)
             setCreatingInFolder(folder)
           }}
           onClose={() => setCreatingFolder(null)}
@@ -426,6 +434,7 @@ export function NotesShell({ config }: { config: RepoConfig }) {
           folders={folders}
           onMoved={(path) => {
             if (selectedPath === movingPath) setSelectedPath(path)
+            setCurrentFolder(dirOf(path))
             setMovingPath(null)
           }}
           onClose={() => setMovingPath(null)}
@@ -446,6 +455,14 @@ export function NotesShell({ config }: { config: RepoConfig }) {
           }
           onConfirm={() => void confirmDelete(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {iconNote && (
+        <IconPickerModal
+          value={iconNote.icon}
+          fallback="note"
+          onSelect={(icon: AppIconId | null) => void setNoteIcon(iconNote.path, icon)}
+          onClose={() => setIconPath(null)}
         />
       )}
     </div>

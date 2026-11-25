@@ -3,6 +3,8 @@ import { fileNameOf } from './paths'
 export interface NoteMeta {
   title: string
   tags: string[]
+  /** Lucide icon id from `appIcons`; null means the default note icon. */
+  icon: string | null
 }
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
@@ -47,6 +49,16 @@ export function setFrontmatterField(content: string, key: string, value: string)
   return content.replace(FRONTMATTER_RE, (block) => block.replace(new RegExp(`^${key}:.*$`, 'm'), `${key}: ${value}`))
 }
 
+/** Sets a frontmatter field, inserting it before the closing `---` when missing. */
+export function upsertFrontmatterField(content: string, key: string, value: string): string {
+  if (!FRONTMATTER_RE.test(content)) {
+    return `---\n${key}: ${value}\n---\n${content}`
+  }
+  const block = content.match(FRONTMATTER_RE)![0]
+  if (new RegExp(`^${key}:`, 'm').test(block)) return setFrontmatterField(content, key, value)
+  return content.replace(FRONTMATTER_RE, (matched) => matched.replace(/\r?\n---\r?\n?$/, `\n${key}: ${value}\n---\n`))
+}
+
 export function stripFrontmatter(content: string): string {
   return content.replace(FRONTMATTER_RE, '')
 }
@@ -55,7 +67,8 @@ export function parseNoteMeta(path: string, content: string): NoteMeta {
   const fields = parseFrontmatter(content)
   const heading = stripFrontmatter(content).match(/^#\s+(.+)$/m)?.[1]
   const title = (fields.title && unquote(fields.title)) || heading?.trim() || fileNameOf(path)
-  return { title, tags: parseTags(fields.tags) }
+  const iconRaw = fields.icon ? unquote(fields.icon) : ''
+  return { title, tags: parseTags(fields.tags), icon: iconRaw || null }
 }
 
 export function newNoteContent(id: string, now: Date, { title, tags }: { title: string; tags: string[] }): string {

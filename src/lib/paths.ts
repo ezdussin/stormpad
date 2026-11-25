@@ -50,6 +50,42 @@ export function joinNoteFolder(parent: string, name: string): string {
   return normalizeNoteFolder(`${normalizeNoteFolder(parent)}${name.trim()}`)
 }
 
+/** Immediate child folder name, e.g. parent `notes/` + `notes/inbox/` → `inbox`. */
+export function childFolderName(parent: string, folder: string): string {
+  const base = normalizeNoteFolder(parent)
+  const full = normalizeNoteFolder(folder)
+  if (!full.startsWith(base) || full === base) return folderLabel(full)
+  return full.slice(base.length).replace(/\/$/, '').split('/')[0] ?? folderLabel(full)
+}
+
+/** Breadcrumb crumbs from `notes/` down to `folder` (inclusive). */
+export function folderBreadcrumbs(folder: string): { path: string; label: string }[] {
+  const normalized = normalizeNoteFolder(folder)
+  const crumbs: { path: string; label: string }[] = [{ path: NOTES_ROOT, label: 'Notas' }]
+  if (normalized === NOTES_ROOT) return crumbs
+  const relative = normalized.slice(NOTES_ROOT.length).replace(/\/$/, '')
+  let current = NOTES_ROOT
+  for (const segment of relative.split('/').filter(Boolean)) {
+    current = `${current}${segment}/`
+    crumbs.push({ path: current, label: segment })
+  }
+  return crumbs
+}
+
+/** Direct child folders of `parent` from a flat folder list. */
+export function childFoldersOf(parent: string, folders: string[]): string[] {
+  const base = normalizeNoteFolder(parent)
+  const children = new Set<string>()
+  for (const folder of folders) {
+    const full = normalizeNoteFolder(folder)
+    if (!full.startsWith(base) || full === base) continue
+    const rest = full.slice(base.length).replace(/\/$/, '')
+    const first = rest.split('/')[0]
+    if (first) children.add(`${base}${first}/`)
+  }
+  return [...children].sort((a, b) => childFolderName(base, a).localeCompare(childFolderName(base, b), 'pt-BR'))
+}
+
 export function slugify(text: string): string {
   return text
     .trim()

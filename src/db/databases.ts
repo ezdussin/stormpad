@@ -13,8 +13,8 @@ import {
 } from './databaseTypes'
 import { db, type DatabaseRow, type DatabaseSchema } from './db'
 
-type SchemaMeta = Pick<DatabaseSchema, 'id' | 'dir' | 'name' | 'fields' | 'view' | 'createdAt'>
-type RowMeta = Pick<DatabaseRow, 'id' | 'dir' | 'values' | 'createdAt'>
+type SchemaMeta = Pick<DatabaseSchema, 'id' | 'dir' | 'name' | 'icon' | 'fields' | 'view' | 'createdAt'>
+type RowMeta = Pick<DatabaseRow, 'id' | 'dir' | 'values' | 'notes' | 'createdAt'>
 
 export const OPTION_COLORS: OptionColor[] = ['gray', 'blue', 'green', 'yellow', 'orange', 'red', 'purple', 'pink', 'brown']
 
@@ -46,6 +46,7 @@ export function parseDatabaseSchema(path: string, content: string): SchemaMeta {
     id: typeof file.id === 'string' ? file.id : path,
     dir: dirOf(path),
     name: typeof file.name === 'string' && file.name ? file.name : 'Sem nome',
+    icon: typeof file.icon === 'string' && file.icon ? file.icon : null,
     // Every database needs a title column; files edited by hand may have lost it.
     fields: fields.some((field) => field.type === 'title') ? fields : [DEFAULT_TITLE_FIELD, ...fields],
     view: {
@@ -70,6 +71,7 @@ export function parseDatabaseRow(path: string, content: string): RowMeta {
     id: typeof file.id === 'string' ? file.id : path,
     dir: path.slice(0, path.lastIndexOf('/rows/') + 1),
     values: file.values && typeof file.values === 'object' ? (file.values as Record<string, CellValue>) : {},
+    notes: typeof file.notes === 'string' ? file.notes : '',
     createdAt: parseTimestamp(file.created_at),
   }
 }
@@ -78,6 +80,7 @@ function buildSchemaContent(meta: SchemaMeta): string {
   const file = {
     id: meta.id,
     name: meta.name,
+    ...(meta.icon ? { icon: meta.icon } : {}),
     created_at: new Date(meta.createdAt).toISOString(),
     fields: meta.fields,
     view: meta.view,
@@ -86,7 +89,12 @@ function buildSchemaContent(meta: SchemaMeta): string {
 }
 
 function buildRowContent(meta: RowMeta): string {
-  const file = { id: meta.id, created_at: new Date(meta.createdAt).toISOString(), values: meta.values }
+  const file = {
+    id: meta.id,
+    created_at: new Date(meta.createdAt).toISOString(),
+    values: meta.values,
+    ...((meta.notes ?? '').trim() ? { notes: meta.notes } : {}),
+  }
   return `${JSON.stringify(file, null, 2)}\n`
 }
 
@@ -121,6 +129,7 @@ function newSchemaMeta(name: string, fields: Field[], now: number): SchemaMeta {
     id,
     dir: `databases/${slugify(name) || 'banco'}-${id.slice(0, 8)}/`,
     name: name.trim(),
+    icon: null,
     fields,
     view: { filters: [], sorts: [] },
     createdAt: now,
@@ -246,7 +255,13 @@ export async function importRecords({
       for (const row of existingRows) {
         const key = keyOf(row.values)
         if (row.syncStatus === 'deleted' || !key || byKey.has(key)) continue
-        const working: RowMeta = { id: row.id, dir: row.dir, values: { ...row.values }, createdAt: row.createdAt }
+        const working: RowMeta = {
+          id: row.id,
+          dir: row.dir,
+          values: { ...row.values },
+          notes: row.notes ?? '',
+          createdAt: row.createdAt,
+        }
         byKey.set(key, working)
         originals.set(working, row)
       }
@@ -268,7 +283,7 @@ export async function importRecords({
         continue
       }
       // Consecutive timestamps keep the file's row order under the default (creation) sort.
-      const rowMeta: RowMeta = { id: crypto.randomUUID(), dir: meta.dir, values, createdAt: now + i }
+      const rowMeta: RowMeta = { id: crypto.randomUUID(), dir: meta.dir, values, notes: '', createdAt: now + i }
       newRows.push(rowMeta)
       if (key) byKey.set(key, rowMeta)
     }
@@ -314,6 +329,10 @@ async function updateSchema(path: string, change: (schema: SchemaMeta) => Schema
 
 export function renameDatabase(path: string, name: string): Promise<void> {
   return updateSchema(path, (schema) => ({ ...schema, name: name.trim() }))
+}
+
+export function setDatabaseIcon(path: string, icon: string | null): Promise<void> {
+  return updateSchema(path, (schema) => ({ ...schema, icon }))
 }
 
 export async function deleteDatabase(path: string): Promise<void> {
@@ -365,24 +384,24 @@ export function deleteField(path: string, fieldId: string): Promise<void> {
   })
 }
 
-/** Moves a field left (-1) or right (+1); the title column always stays first. */
+/** Moves a field left (-1) or right (+1). */
 export function moveField(path: string, fieldId: string, delta: -1 | 1): Promise<void> {
   return updateSchema(path, (schema) => {
     const fields = [...schema.fields]
     const from = fields.findIndex((field) => field.id === fieldId)
     const to = from + delta
-    if (from < 1 || to < 1 || to >= fields.length) return schema
+    if (from < 0 || to < 0 || to >= fields.length) return schema
     ;[fields[from], fields[to]] = [fields[to], fields[from]]
     return { ...schema, fields }
   })
 }
 
-/** Reorders a non-title field to `toIndex` (title stays at 0). */
+/** Reorders a field to `toIndex`. */
 export function reorderField(path: string, fieldId: string, toIndex: number): Promise<void> {
   return updateSchema(path, (schema) => {
     const fields = [...schema.fields]
     const from = fields.findIndex((field) => field.id === fieldId)
-    if (from < 1 || toIndex < 1 || toIndex >= fields.length || from === toIndex) return schema
+    if (from < 0 || toIndex < 0 || toIndex >= fields.length || from === toIndex) return schema
     const [item] = fields.splice(from, 1)
     fields.splice(toIndex, 0, item)
     return { ...schema, fields }
@@ -476,9 +495,13 @@ export function deleteOption(path: string, fieldId: string, optionId: string): P
 
 // ---- rows ------------------------------------------------------------------
 
-export async function addRow(dir: string, values: Record<string, CellValue> = {}): Promise<string> {
+export async function addRow(
+  dir: string,
+  values: Record<string, CellValue> = {},
+  notes = '',
+): Promise<string> {
   const now = new Date()
-  const meta: RowMeta = { id: crypto.randomUUID(), dir, values, createdAt: now.getTime() }
+  const meta: RowMeta = { id: crypto.randomUUID(), dir, values, notes, createdAt: now.getTime() }
   const path = `${dir}rows/${meta.id}.json`
   await db.databaseRows.add({
     path,
@@ -500,14 +523,28 @@ export async function setRowValue(path: string, fieldId: string, value: CellValu
     const values = Object.fromEntries(
       Object.entries({ ...row.values, [fieldId]: value }).filter(([id, v]) => fieldIds.has(id) && v !== null),
     )
-    const meta = { ...row, values }
+    const meta: RowMeta = { ...row, values, notes: row.notes ?? '' }
     await db.databaseRows.update(path, { values, content: buildRowContent(meta), updatedAt: Date.now(), syncStatus: 'dirty' })
+  })
+}
+
+export async function setRowNotes(path: string, notes: string): Promise<void> {
+  await db.transaction('rw', db.databaseRows, async () => {
+    const row = await db.databaseRows.get(path)
+    if (!row || row.syncStatus === 'deleted') return
+    const meta: RowMeta = { ...row, notes, values: row.values }
+    await db.databaseRows.update(path, {
+      notes,
+      content: buildRowContent(meta),
+      updatedAt: Date.now(),
+      syncStatus: 'dirty',
+    })
   })
 }
 
 export async function duplicateRow(path: string): Promise<string | null> {
   const row = await db.databaseRows.get(path)
-  return row ? addRow(row.dir, structuredClone(row.values)) : null
+  return row ? addRow(row.dir, structuredClone(row.values), row.notes ?? '') : null
 }
 
 export async function deleteRows(paths: string[]): Promise<void> {

@@ -89,27 +89,34 @@ function InputCell({ field, value, autoEdit = false, onSave }: InputCellProps) {
     )
   }
 
+  const formatted = formatValue(value, field)
   return (
     <div
       onClick={start}
       className={`${cellBox} cursor-text truncate ${field.type === 'title' ? 'font-medium' : ''} ${
         field.type === 'number' ? 'text-right tabular-nums' : ''
-      }`}
+      } ${formatted ? '' : 'text-zinc-600'}`}
     >
-      {formatValue(value, field)}
+      {formatted ?? 'Vazio'}
     </div>
   )
 }
 
 function OptionCell({ schemaPath, field, value, onSave }: { schemaPath: string; field: Field; value: CellValue; onSave: (value: CellValue) => void }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const selected = selectedOptions(value, field)
 
   return (
     <>
-      <div onClick={(e) => setAnchor(e.currentTarget)} className={`${cellBox} flex cursor-pointer flex-wrap items-center gap-1`}>
-        {selectedOptions(value, field).map((option) => (
-          <OptionChip key={option.id} option={option} />
-        ))}
+      <div
+        onClick={(e) => setAnchor(e.currentTarget)}
+        className={`${cellBox} flex min-h-[34px] cursor-pointer flex-wrap items-center gap-1`}
+      >
+        {selected.length > 0 ? (
+          selected.map((option) => <OptionChip key={option.id} option={option} />)
+        ) : (
+          <span className="text-zinc-600">Selecionar…</span>
+        )}
       </div>
       {anchor && (
         <OptionPicker
