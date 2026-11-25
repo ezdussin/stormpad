@@ -1,6 +1,23 @@
 import { useId, useState, type FormEvent } from 'react'
-import { createNote, DEFAULT_NOTE_FOLDER, renameNote } from '../db/notes'
-import { dirOf, fileNameOf, normalizeFileName, slugify, timestampSlug, validateFileName } from '../lib/paths'
+import {
+  createNote,
+  createNoteFolder,
+  DEFAULT_NOTE_FOLDER,
+  folderLabel,
+  moveNote,
+  renameNote,
+} from '../db/notes'
+import {
+  dirOf,
+  fileNameOf,
+  normalizeFileName,
+  normalizeNoteFolder,
+  NOTES_ROOT,
+  slugify,
+  timestampSlug,
+  validateFileName,
+  validateFolderName,
+} from '../lib/paths'
 import { Modal } from './Modal'
 import { TagInput } from './TagInput'
 
@@ -37,14 +54,47 @@ function FileNameField({ folder, value, onChange }: { folder: string; value: str
   )
 }
 
+function FolderSelect({
+  folders,
+  value,
+  onChange,
+}: {
+  folders: string[]
+  value: string
+  onChange: (folder: string) => void
+}) {
+  const options = folders.includes(value) ? folders : [...folders, value].sort()
+  return (
+    <label className="block space-y-1">
+      <span className="text-zinc-400">Pasta</span>
+      <select className={inputClass} value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((folder) => (
+          <option key={folder} value={folder}>
+            {folderLabel(folder)}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 interface NewNoteModalProps {
   tagSuggestions: string[]
+  folders: string[]
+  initialFolder?: string
   onCreated: (path: string) => void
   onClose: () => void
 }
 
-export function NewNoteModal({ tagSuggestions, onCreated, onClose }: NewNoteModalProps) {
+export function NewNoteModal({
+  tagSuggestions,
+  folders,
+  initialFolder = DEFAULT_NOTE_FOLDER,
+  onCreated,
+  onClose,
+}: NewNoteModalProps) {
   const formId = useId()
+  const [folder, setFolder] = useState(() => normalizeNoteFolder(initialFolder))
   const [name, setName] = useState(() => timestampSlug(new Date()))
   const [nameTouched, setNameTouched] = useState(false)
   const [title, setTitle] = useState('')
@@ -61,7 +111,7 @@ export function NewNoteModal({ tagSuggestions, onCreated, onClose }: NewNoteModa
     const invalid = validateFileName(name)
     if (invalid) return setError(invalid)
     try {
-      onCreated(await createNote({ name, title, tags }))
+      onCreated(await createNote({ name, title, tags, folder }))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -70,8 +120,9 @@ export function NewNoteModal({ tagSuggestions, onCreated, onClose }: NewNoteModa
   return (
     <Modal title="Nova nota" onClose={onClose} footer={<DialogButtons formId={formId} submitLabel="Criar" onCancel={onClose} />}>
       <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+        <FolderSelect folders={folders} value={folder} onChange={setFolder} />
         <FileNameField
-          folder={DEFAULT_NOTE_FOLDER}
+          folder={folder}
           value={name}
           onChange={(value) => {
             setName(value)
@@ -132,6 +183,99 @@ export function RenameNoteModal({ path, onRenamed, onClose }: RenameNoteModalPro
             setError(null)
           }}
         />
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </form>
+    </Modal>
+  )
+}
+
+interface MoveNoteModalProps {
+  path: string
+  folders: string[]
+  onMoved: (path: string) => void
+  onClose: () => void
+}
+
+export function MoveNoteModal({ path, folders, onMoved, onClose }: MoveNoteModalProps) {
+  const formId = useId()
+  const [folder, setFolder] = useState(() => dirOf(path))
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    try {
+      onMoved(await moveNote(path, folder))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  return (
+    <Modal title="Mover nota" onClose={onClose} footer={<DialogButtons formId={formId} submitLabel="Mover" onCancel={onClose} />}>
+      <form id={formId} onSubmit={handleSubmit} className="space-y-3">
+        <p className="text-sm text-zinc-400">
+          Mover <strong className="text-zinc-200">{fileNameOf(path)}</strong> para:
+        </p>
+        <FolderSelect
+          folders={folders}
+          value={folder}
+          onChange={(value) => {
+            setFolder(value)
+            setError(null)
+          }}
+        />
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </form>
+    </Modal>
+  )
+}
+
+interface NewFolderModalProps {
+  parentFolder?: string
+  onCreated: (folder: string) => void
+  onClose: () => void
+}
+
+export function NewFolderModal({ parentFolder = NOTES_ROOT, onCreated, onClose }: NewFolderModalProps) {
+  const formId = useId()
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const parent = normalizeNoteFolder(parentFolder)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    const invalid = validateFolderName(name)
+    if (invalid) return setError(invalid)
+    try {
+      onCreated(await createNoteFolder(parent, name))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  return (
+    <Modal
+      title="Nova pasta"
+      onClose={onClose}
+      footer={<DialogButtons formId={formId} submitLabel="Criar" onCancel={onClose} />}
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-3">
+        <label className="block space-y-1">
+          <span className="text-zinc-400">Nome da pasta</span>
+          <input
+            data-autofocus
+            className={inputClass}
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              setError(null)
+            }}
+          />
+          <span className="block truncate text-xs text-zinc-600">
+            {parent}
+            {name.trim() || '…'}/
+          </span>
+        </label>
         {error && <p className="text-sm text-red-400">{error}</p>}
       </form>
     </Modal>

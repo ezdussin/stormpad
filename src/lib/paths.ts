@@ -1,3 +1,5 @@
+export const NOTES_ROOT = 'notes/'
+
 export function fileNameOf(path: string): string {
   return (path.split('/').pop() ?? path).replace(/\.md$/, '')
 }
@@ -17,6 +19,35 @@ export function validateFileName(name: string): string | null {
   if (normalized.startsWith('.')) return 'O nome não pode começar com ponto.'
   if (normalized.length > MAX_FILE_NAME_LENGTH) return `O nome pode ter no máximo ${MAX_FILE_NAME_LENGTH} caracteres.`
   return null
+}
+
+/** Normalize to `notes/.../` (always under notes/, always trailing slash). */
+export function normalizeNoteFolder(folder: string): string {
+  let value = folder.trim().replace(/\\/g, '/')
+  if (!value.startsWith(NOTES_ROOT)) value = `${NOTES_ROOT}${value.replace(/^\/+/, '')}`
+  value = value.replace(/\/{2,}/g, '/')
+  if (!value.endsWith('/')) value += '/'
+  return value
+}
+
+export function validateFolderName(name: string): string | null {
+  const normalized = name.trim()
+  if (!normalized) return 'Informe um nome.'
+  if (INVALID_FILE_NAME_CHARS.test(normalized)) return 'O nome não pode conter / \\ : * ? " < > |'
+  if (normalized.startsWith('.')) return 'O nome não pode começar com ponto.'
+  if (normalized.length > MAX_FILE_NAME_LENGTH) return `O nome pode ter no máximo ${MAX_FILE_NAME_LENGTH} caracteres.`
+  return null
+}
+
+/** Display label for a note folder path, e.g. `notes/inbox/` → `inbox`. */
+export function folderLabel(folder: string): string {
+  const normalized = normalizeNoteFolder(folder)
+  const relative = normalized.slice(NOTES_ROOT.length).replace(/\/$/, '')
+  return relative || 'notes'
+}
+
+export function joinNoteFolder(parent: string, name: string): string {
+  return normalizeNoteFolder(`${normalizeNoteFolder(parent)}${name.trim()}`)
 }
 
 export function slugify(text: string): string {

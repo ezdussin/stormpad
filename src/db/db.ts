@@ -88,6 +88,8 @@ export type SettingKey =
   | 'editor_mode'
   | 'section'
   | 'deep_link_memory_id'
+  | 'note_folders'
+  | 'note_folders_expanded'
 
 export interface Setting {
   key: SettingKey
