@@ -1,4 +1,4 @@
-import { Download, FolderTree, ImagePlus, Images, Maximize2, Trash2, Upload } from 'lucide-react'
+import { Download, FolderTree, ImagePlus, Images, Info, Maximize2, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import type { GalleryItem } from '../../db/db'
 import { deleteGalleryItem, useGalleryItems } from '../../db/gallery'
@@ -148,6 +148,14 @@ export function GalleryView() {
           }}
         />
       </header>
+
+      <div className="flex items-start gap-2 border-b border-zinc-800 bg-zinc-900/40 px-4 py-2 text-xs text-zinc-400">
+        <Info size={14} className="mt-0.5 shrink-0 text-sky-400" />
+        <p>
+          Imagens são reduzidas para no máximo 2560px e comprimidas em WebP (ou JPEG se o navegador não
+          suportar). GIF e SVG ficam no original. Só arquivos de imagem são aceitos.
+        </p>
+      </div>
 
       {(categories.length > 0 || uncategorizedCount > 0) && (
         <div className="flex gap-1.5 overflow-x-auto border-b border-zinc-800 px-4 py-2">
