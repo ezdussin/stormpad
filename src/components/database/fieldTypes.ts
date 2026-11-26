@@ -26,3 +26,16 @@ export const OPTION_COLOR_CLASSES: Record<OptionColor, string> = {
   pink: 'bg-pink-800/70 text-pink-100',
   red: 'bg-red-800/70 text-red-100',
 }
+
+/** Solid swatches for the option color picker. */
+export const OPTION_COLOR_DOTS: Record<OptionColor, string> = {
+  gray: 'bg-zinc-500',
+  brown: 'bg-amber-700',
+  orange: 'bg-orange-500',
+  yellow: 'bg-yellow-400',
+  green: 'bg-emerald-500',
+  blue: 'bg-sky-500',
+  purple: 'bg-violet-500',
+  pink: 'bg-pink-500',
+  red: 'bg-red-500',
+}

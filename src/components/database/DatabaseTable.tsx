@@ -203,6 +203,12 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
     ])
   }
 
+  async function createAndOpenRow() {
+    const path = await addRow(schema.dir)
+    setNewRowPath(path)
+    setOpenRowPath(path)
+  }
+
   function openRowMenu(event: MouseEvent, row: DatabaseRow) {
     menu.open(event, [
       { label: 'Abrir', icon: PanelRightOpen, onSelect: () => setOpenRowPath(row.path) },
@@ -211,7 +217,10 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
         icon: CopyPlus,
         onSelect: async () => {
           const copy = await duplicateRow(row.path)
-          if (copy) setNewRowPath(copy)
+          if (copy) {
+            setNewRowPath(copy)
+            setOpenRowPath(copy)
+          }
         },
       },
       'separator',
@@ -332,7 +341,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
           <ToolbarButton icon={CopyCheck} label="Duplicatas" count={0} onClick={() => setFindingDuplicates(true)} />
           <ToolbarButton icon={FileUp} label="Importar" count={0} onClick={() => setImporting({})} />
           <button
-            onClick={async () => setNewRowPath(await addRow(schema.dir))}
+            onClick={() => void createAndOpenRow()}
             className="ml-1 flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium hover:bg-sky-500"
           >
             <Plus size={16} /> Nova linha
@@ -431,12 +440,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
                     >
                       <div className="flex items-start">
                         <div className="min-w-0 flex-1">
-                          <Cell
-                            schemaPath={schema.path}
-                            field={field}
-                            row={row}
-                            autoEdit={row.path === newRowPath && field.type === 'title'}
-                          />
+                          <Cell schemaPath={schema.path} field={field} row={row} />
                         </div>
                         {index === 0 && (
                           <button
@@ -462,7 +466,7 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
               <td colSpan={fields.length + 1} className="p-0">
                 <button
                   type="button"
-                  onClick={async () => setNewRowPath(await addRow(schema.dir))}
+                  onClick={() => void createAndOpenRow()}
                   className="flex w-full items-center gap-1.5 px-2 py-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
                 >
                   <Plus size={14} /> Nova linha
@@ -524,7 +528,15 @@ export function DatabaseTable({ schema }: { schema: DatabaseSchema }) {
         />
       )}
       {openRowPath && (
-        <RowDetailDrawer schema={schema} rowPath={openRowPath} onClose={() => setOpenRowPath(null)} />
+        <RowDetailDrawer
+          schema={schema}
+          rowPath={openRowPath}
+          focusTitle={openRowPath === newRowPath}
+          onClose={() => {
+            setOpenRowPath(null)
+            if (newRowPath === openRowPath) setNewRowPath(null)
+          }}
+        />
       )}
     </div>
   )

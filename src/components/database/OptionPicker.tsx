@@ -1,10 +1,10 @@
 import { Check, Plus, Trash2, X } from 'lucide-react'
-import { useState, type KeyboardEvent } from 'react'
-import type { CellValue, Field, SelectOption } from '../../db/databaseTypes'
-import { addOption, deleteOption, OPTION_COLORS } from '../../db/databases'
+import { useState, type KeyboardEvent, type MouseEvent } from 'react'
+import type { CellValue, Field, OptionColor, SelectOption } from '../../db/databaseTypes'
+import { addOption, deleteOption, OPTION_COLORS, updateOptionColor } from '../../db/databases'
 import { ConfirmDialog } from '../Modal'
 import { Popover } from '../Popover'
-import { OPTION_COLOR_CLASSES } from './fieldTypes'
+import { OPTION_COLOR_CLASSES, OPTION_COLOR_DOTS } from './fieldTypes'
 
 export function OptionChip({ option, onRemove }: { option: SelectOption; onRemove?: () => void }) {
   return (
@@ -21,6 +21,36 @@ export function OptionChip({ option, onRemove }: { option: SelectOption; onRemov
   )
 }
 
+function ColorSwatches({
+  value,
+  onChange,
+}: {
+  value: OptionColor
+  onChange: (color: OptionColor) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5 px-2 py-1.5" role="group" aria-label="Cor da opção">
+      {OPTION_COLORS.map((color) => {
+        const selected = color === value
+        return (
+          <button
+            key={color}
+            type="button"
+            title={color}
+            onClick={(event) => {
+              event.stopPropagation()
+              onChange(color)
+            }}
+            className={`h-4 w-4 rounded-full ${OPTION_COLOR_DOTS[color]} ${
+              selected ? 'ring-2 ring-sky-400 ring-offset-1 ring-offset-zinc-900' : 'hover:scale-110'
+            }`}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 interface OptionPickerProps {
   schemaPath: string
   field: Field
@@ -33,6 +63,7 @@ interface OptionPickerProps {
 export function OptionPicker({ schemaPath, field, value, anchor, onChange, onClose }: OptionPickerProps) {
   const [query, setQuery] = useState('')
   const [pendingDelete, setPendingDelete] = useState<SelectOption | null>(null)
+  const [colorTargetId, setColorTargetId] = useState<string | null>(null)
   const multi = field.type === 'multi_select'
   const options = field.options ?? []
   const byId = new Map(options.map((option) => [option.id, option]))
@@ -40,6 +71,7 @@ export function OptionPicker({ schemaPath, field, value, anchor, onChange, onClo
   const search = query.trim().toLowerCase()
   const visible = options.filter((option) => option.name.toLowerCase().includes(search))
   const exact = options.find((option) => option.name.toLowerCase() === search)
+  const colorTarget = colorTargetId ? byId.get(colorTargetId) : undefined
 
   function toggle(id: string) {
     if (multi) {
@@ -66,9 +98,14 @@ export function OptionPicker({ schemaPath, field, value, anchor, onChange, onClo
     }
   }
 
+  function openColorPicker(event: MouseEvent, option: SelectOption) {
+    event.stopPropagation()
+    setColorTargetId((current) => (current === option.id ? null : option.id))
+  }
+
   return (
     <>
-      <Popover anchor={anchor} onClose={onClose} className="w-64">
+      <Popover anchor={anchor} onClose={onClose} className="w-72">
         <div className="flex flex-wrap items-center gap-1 border-b border-zinc-800 p-2">
           {selectedIds.map((id) => (
             <OptionChip key={id} option={byId.get(id)!} onRemove={() => onChange(multi ? selectedIds.filter((x) => x !== id) : null)} />
@@ -84,18 +121,37 @@ export function OptionPicker({ schemaPath, field, value, anchor, onChange, onClo
         </div>
         <div className="max-h-60 overflow-y-auto p-1">
           {visible.map((option) => (
-            <div key={option.id} className="group flex items-center gap-1 rounded hover:bg-zinc-800">
-              <button onClick={() => toggle(option.id)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left">
-                <OptionChip option={option} />
-                {selectedIds.includes(option.id) && <Check size={14} className="ml-auto shrink-0 text-sky-400" />}
-              </button>
-              <button
-                onClick={() => setPendingDelete(option)}
-                title="Excluir opção"
-                className="mr-1 rounded p-1 text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-700 hover:text-red-400"
-              >
-                <Trash2 size={13} />
-              </button>
+            <div key={option.id} className="rounded hover:bg-zinc-800">
+              <div className="group flex items-center gap-1">
+                <button
+                  type="button"
+                  title="Alterar cor"
+                  onClick={(event) => openColorPicker(event, option)}
+                  className={`ml-1.5 h-3.5 w-3.5 shrink-0 rounded-full ${OPTION_COLOR_DOTS[option.color]} ring-offset-1 ring-offset-zinc-900 hover:ring-2 hover:ring-zinc-500 ${
+                    colorTargetId === option.id ? 'ring-2 ring-sky-400' : ''
+                  }`}
+                />
+                <button onClick={() => toggle(option.id)} className="flex min-w-0 flex-1 items-center gap-2 px-1.5 py-1 text-left">
+                  <OptionChip option={option} />
+                  {selectedIds.includes(option.id) && <Check size={14} className="ml-auto shrink-0 text-sky-400" />}
+                </button>
+                <button
+                  onClick={() => setPendingDelete(option)}
+                  title="Excluir opção"
+                  className="mr-1 rounded p-1 text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-700 hover:text-red-400"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              {colorTargetId === option.id && colorTarget && (
+                <ColorSwatches
+                  value={colorTarget.color}
+                  onChange={(color) => {
+                    void updateOptionColor(schemaPath, field.id, option.id, color)
+                    setColorTargetId(null)
+                  }}
+                />
+              )}
             </div>
           ))}
           {search && !exact && (

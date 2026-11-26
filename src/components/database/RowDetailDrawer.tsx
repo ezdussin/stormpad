@@ -11,9 +11,11 @@ interface RowDetailDrawerProps {
   schema: DatabaseSchema
   rowPath: string
   onClose: () => void
+  /** When true, the title cell opens already in edit mode (new / duplicated rows). */
+  focusTitle?: boolean
 }
 
-export function RowDetailDrawer({ schema, rowPath, onClose }: RowDetailDrawerProps) {
+export function RowDetailDrawer({ schema, rowPath, onClose, focusTitle = false }: RowDetailDrawerProps) {
   const row = useLiveQuery(() => db.databaseRows.get(rowPath), [rowPath])
 
   if (!row || row.syncStatus === 'deleted') {
@@ -50,7 +52,12 @@ export function RowDetailDrawer({ schema, rowPath, onClose }: RowDetailDrawerPro
                     </span>
                   </div>
                   <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900/50">
-                    <Cell schemaPath={schema.path} field={field} row={row} />
+                    <Cell
+                      schemaPath={schema.path}
+                      field={field}
+                      row={row}
+                      autoEdit={focusTitle && field.type === 'title'}
+                    />
                   </div>
                 </div>
               )
