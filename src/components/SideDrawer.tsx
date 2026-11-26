@@ -10,7 +10,7 @@ interface SideDrawerProps {
   subtitle?: ReactNode
 }
 
-/** Right-side detail panel on large screens; nearly full-width sheet on small ones. */
+/** Right-side detail panel on large screens; full-viewport sheet on smaller ones. */
 export function SideDrawer({ title, subtitle, onClose, children }: SideDrawerProps) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -31,12 +31,17 @@ export function SideDrawer({ title, subtitle, onClose, children }: SideDrawerPro
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
-      <button type="button" aria-label="Fechar" onClick={onClose} className="absolute inset-0 bg-black/50" />
+      <button
+        type="button"
+        aria-label="Fechar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/50 max-lg:hidden"
+      />
       <aside
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative flex h-full w-full max-w-full flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/50 sm:max-w-md lg:max-w-xl xl:max-w-2xl"
+        className="relative flex h-full w-full max-w-full flex-col border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/50 max-lg:border-0 lg:max-w-xl lg:border-l xl:max-w-2xl"
       >
         <header className="flex shrink-0 items-start gap-3 border-b border-zinc-800 px-4 py-3">
           <div className="min-w-0 flex-1">

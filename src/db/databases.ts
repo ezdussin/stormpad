@@ -493,6 +493,24 @@ export function deleteOption(path: string, fieldId: string, optionId: string): P
   }))
 }
 
+export function updateOptionColor(
+  path: string,
+  fieldId: string,
+  optionId: string,
+  color: OptionColor,
+): Promise<void> {
+  return updateSchema(path, (schema) => ({
+    ...schema,
+    fields: schema.fields.map((field) => {
+      if (field.id !== fieldId) return field
+      return {
+        ...field,
+        options: (field.options ?? []).map((option) => (option.id === optionId ? { ...option, color } : option)),
+      }
+    }),
+  }))
+}
+
 // ---- rows ------------------------------------------------------------------
 
 export async function addRow(
